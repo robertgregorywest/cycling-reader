@@ -43,7 +43,24 @@ Lifecycle  stream expires at 30 days; saving mirrors images and keeps
 
 ## Status
 
-Design complete, implementation not started.
+Extraction and its fixture corpus are built. The Ingest Run, the schema and the
+Worker are not.
+
+## Working on it
+
+```sh
+pnpm install
+pnpm test          # no network required, or permitted
+pnpm typecheck
+pnpm extract                          # list the fixture corpus
+pnpm extract cyclingnews-race-report  # print an Extraction, to inspect by eye
+pnpm extract cyclingnews-race-report --text
+pnpm golden:update # after changing Extraction on purpose; read the diff
+```
+
+[`src/README.md`](src/README.md) explains the source layout;
+[`tests/fixtures/README.md`](tests/fixtures/README.md) explains the corpus and
+how to refresh it after a Source redesign.
 
 ## Running costs
 

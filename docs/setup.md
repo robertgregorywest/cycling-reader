@@ -44,7 +44,10 @@ No payment method is needed for Workers or D1.
 
 ### 2. Authenticate wrangler
 
-Interactive; opens a browser.
+Interactive; opens a browser. Needed to create the database and the bucket, and
+again at ticket #7 to deploy the Worker. Nothing in the ingest path uses
+wrangler: it reaches D1 over the HTTP API
+([ADR-0007](adr/0007-d1-over-http-not-wrangler.md)).
 
 ```sh
 npx wrangler login
@@ -75,7 +78,7 @@ npx wrangler r2 bucket create cycling-reader-images
 > 10 GB of storage, no egress fees — costs nothing to use at this scale. This is
 > the one place the £0 claim meets a card form.
 >
-> **This step is skippable.** R2 is used only by ticket
+> **This step is skippable for now.** R2 is used only by ticket
 > [#12](https://github.com/robertgregorywest/cycling-reader/issues/12) (Saving,
 > Mirroring and the Archive). Tickets #5 through #11 never touch it, so skipping
 > this yields a complete, working reader without the durable Archive. If you
@@ -111,7 +114,29 @@ The repository is public
 credential is a public disclosure. Secrets live here and in Worker secrets,
 never in the repository and never in an issue.
 
-### 8. Let Actions commit
+### 8. Keep the same three values locally
+
+The ingest and migration commands read them from the environment. A `.dev.vars`
+file in the repository root is git-ignored and is loaded automatically:
+
+```sh
+CLOUDFLARE_ACCOUNT_ID=…
+D1_DATABASE_ID=…
+CLOUDFLARE_API_TOKEN=…
+```
+
+### 9. Create the schema in D1
+
+```sh
+pnpm migrate --list   # what D1 has not seen yet
+pnpm migrate          # apply it
+```
+
+This applies `migrations/*.sql` — the same files the local SQLite store applies
+to itself — and records them the way `wrangler d1 migrations` would. Run it
+again whenever a migration is added; it is idempotent.
+
+### 10. Let Actions commit
 
 **Settings** → **Actions** → **General** → **Workflow permissions** → **Read and
 write permissions**.
@@ -172,6 +197,6 @@ to a third party, and nothing to sign up for.
 | Ticket | What you need |
 | --- | --- |
 | #2–#4 | Node 22.13, pnpm |
-| #5 | Cloudflare account, wrangler login, D1 database, API token, three GitHub Secrets, Actions write permission |
+| #5 | Cloudflare account, wrangler login, D1 database, API token, three GitHub Secrets, the same three in `.dev.vars`, `pnpm migrate`, Actions write permission |
 | #7 | A passphrase, a `workers.dev` subdomain |
 | #12 | An R2 bucket — the only step that may want a payment method |

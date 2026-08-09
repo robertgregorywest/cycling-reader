@@ -1,19 +1,26 @@
 /**
- * Run an Ingest Run against a local SQLite file, for real, so that what it did
- * can be inspected by opening the database rather than inferred from a test.
+ * Run an Ingest Run for real, so that what it did can be inspected rather than
+ * inferred from a test.
  *
  *   pnpm ingest                        # writes ./local/cycling-reader.db
  *   pnpm ingest --db /tmp/reader.db
  *   pnpm ingest --source cyclingweekly # one Source only
+ *   pnpm ingest --store d1             # writes production D1
  *
- * The file it writes is local and ignored by git: this repository is public
- * and the reading content is not.
+ * The SQLite file it writes is local and ignored by git: this repository is
+ * public and the reading content is not.
+ *
+ * `--store d1` is what the scheduled workflow runs, and needs the three
+ * Cloudflare credentials in the environment — from repository secrets in the
+ * workflow, and from a local `.dev.vars` here. See docs/setup.md.
  */
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { SOURCES } from './config.ts'
 import { ingest, type IngestReport } from './run.ts'
+import { D1ArticleStore, D1HttpDatabase } from './store/d1.ts'
 import { SqliteArticleStore } from './store/sqlite.ts'
+import type { ArticleStore } from './store/store.ts'
 
 const DEFAULT_DATABASE = 'local/cycling-reader.db'
 
@@ -31,8 +38,7 @@ if (sources.length === 0) {
   process.exit(1)
 }
 
-mkdirSync(dirname(options.database), { recursive: true })
-const store = SqliteArticleStore.open(options.database)
+const target = open(options)
 
 try {
   const report = await ingest({
@@ -40,11 +46,34 @@ try {
     fetchFeed: fetchText,
     fetchPage: fetchText,
     now: () => new Date(),
-    store,
+    store: target.store,
   })
-  print(options.database, report)
+  print(target.description, report)
 } finally {
-  store.close()
+  target.close()
+}
+
+/**
+ * The store the Run writes to. D1 is production and takes its credentials
+ * from the environment; SQLite is a file, and is what running this by hand
+ * gets you unless you ask otherwise.
+ */
+function open(options: Options): {
+  readonly store: ArticleStore
+  readonly description: string
+  readonly close: () => void
+} {
+  if (options.store === 'd1') {
+    return {
+      store: new D1ArticleStore(D1HttpDatabase.fromEnvironment()),
+      description: 'D1',
+      close: () => {},
+    }
+  }
+
+  mkdirSync(dirname(options.database), { recursive: true })
+  const store = SqliteArticleStore.open(options.database)
+  return { store, description: options.database, close: () => store.close() }
 }
 
 async function fetchText(url: string): Promise<string> {
@@ -53,8 +82,8 @@ async function fetchText(url: string): Promise<string> {
   return await response.text()
 }
 
-function print(database: string, report: IngestReport): void {
-  console.log(`database    ${database}`)
+function print(store: string, report: IngestReport): void {
+  console.log(`store       ${store}`)
   console.log(`started     ${report.startedAt}`)
   console.log(`finished    ${report.finishedAt}`)
   console.log(`admitted    ${report.admitted}`)
@@ -79,10 +108,14 @@ function counts(record: Readonly<Record<string, number>>): string {
   return reported.map(([name, count]) => `${name} ${count}`).join(', ')
 }
 
-function parseArguments(argv: readonly string[]): {
+interface Options {
+  readonly store: 'sqlite' | 'd1'
   readonly database: string
   readonly source: string | null
-} {
+}
+
+function parseArguments(argv: readonly string[]): Options {
+  let store: Options['store'] = 'sqlite'
   let database = DEFAULT_DATABASE
   let source: string | null = null
 
@@ -95,11 +128,16 @@ function parseArguments(argv: readonly string[]): {
     } else if (flag === '--source' && value !== undefined) {
       source = value
       index += 1
+    } else if (flag === '--store' && (value === 'sqlite' || value === 'd1')) {
+      store = value
+      index += 1
     } else {
-      console.error(`Usage: pnpm ingest [--db <path>] [--source <${SOURCES.map((entry) => entry.id).join('|')}>]`)
+      console.error(
+        `Usage: pnpm ingest [--store <sqlite|d1>] [--db <path>] [--source <${SOURCES.map((entry) => entry.id).join('|')}>]`,
+      )
       process.exit(1)
     }
   }
 
-  return { database, source }
+  return { store, database, source }
 }

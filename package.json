@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "extract": "tsx src/ingest/extraction/cli.ts",
-    "ingest": "tsx src/ingest/cli.ts",
+    "ingest": "tsx --env-file-if-exists=.dev.vars src/ingest/cli.ts",
+    "migrate": "tsx --env-file-if-exists=.dev.vars scripts/migrate.ts",
     "golden:update": "tsx scripts/update-golden.ts"
   },
   "dependencies": {

@@ -1,0 +1,49 @@
+name: Ingest
+
+# An Ingest Run every two hours: new Articles appear within about two hours of
+# publication, which is what makes the reader current enough to be a primary
+# source. Extraction runs here rather than in the Worker because the Workers
+# free plan allows 10 ms of CPU per invocation (ADR-0001).
+on:
+  schedule:
+    # Five past the even hours. Off the hour because that is when everything
+    # else on GitHub's shared schedulers runs.
+    - cron: '5 */2 * * *'
+  workflow_dispatch:
+
+# A slow Run must not race the next one into double-fetching or conflicting
+# writes — and must not be cancelled by it either. Cancelling would abandon a
+# Run midway through its Articles, which is the one outcome worse than a late
+# Run.
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    # A Run fetches two Feeds and up to a hundred pages, politely and in
+    # sequence. Well over what it needs; short enough that a wedged Run frees
+    # the concurrency group before the next schedule.
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Credentials come from repository secrets and are never committed: this
+      # repository is public (ADR-0002).
+      - name: Ingest into D1
+        run: pnpm ingest --store d1
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

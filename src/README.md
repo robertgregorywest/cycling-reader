@@ -9,6 +9,12 @@ overhead at this size.
 | `worker/` | Cloudflare Workers | The reading experience. Reads only; never extracts |
 | `shared/` | Both | Domain types and the schema the two runtimes agree on |
 
+Each root is checked against the types of the runtime it runs on:
+`tsconfig.json` covers the Node half and `tsconfig.worker.json` the Worker,
+where `process` does not exist and `D1Database` does. `pnpm typecheck` runs
+both, and `pnpm test` runs the matching pair of Vitest projects — `node`, and
+`worker` inside workerd itself against a real D1 binding.
+
 `migrations/` at the repository root holds the schema. It is applied to D1 by
 `pnpm migrate` and to the local SQLite store by the store itself, so the two
 implementations cannot drift. Both stores also run the same statements, which

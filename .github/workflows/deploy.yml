@@ -1,0 +1,55 @@
+name: Deploy
+
+# Deployment is not a step to get right by hand. `main` is what is deployed,
+# and there is no staging: the reader has one user, and a broken deploy is
+# noticed and reverted in the time it takes to reload the index.
+on:
+  push:
+    branches: [main]
+    # The ingest workflow commits a dated heartbeat to `main` once a day so
+    # that GitHub never auto-disables the schedule (ADR-0006). That is not a
+    # reason to redeploy the Worker, and neither is prose.
+    paths-ignore:
+      - '.github/heartbeat'
+      - '**/*.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+# A second push while the first is deploying should win, and the older deploy
+# is of no interest once it has been superseded.
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Before deploying, not after: the suite drives the Worker's own fetch
+      # handler against a real D1 binding, so it fails here rather than at the
+      # sign-in form.
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      # Secrets — the passphrase hash and the cookie signing key — are set
+      # directly on the Worker with `wrangler secret put` and are not touched
+      # by a deploy. Only the API token lives here, and never in the repository
+      # (ADR-0002).
+      - name: Deploy the Worker
+        run: pnpm run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

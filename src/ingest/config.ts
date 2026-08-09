@@ -10,8 +10,6 @@ import type { Section } from '../shared/section.ts'
  */
 export interface SourceConfig {
   readonly id: SourceId
-  /** The Source's name, as the reader sees it. */
-  readonly name: string
   readonly feedUrl: string
   /**
    * URL path prefixes mapped into the Section vocabulary. The longest
@@ -34,7 +32,6 @@ export interface SourceConfig {
 export const SOURCES: readonly SourceConfig[] = [
   {
     id: 'cyclingnews',
-    name: 'Cyclingnews',
     feedUrl: 'https://www.cyclingnews.com/feeds.xml',
     sectionPaths: {
       'pro-cycling/racing': 'racing',
@@ -54,7 +51,6 @@ export const SOURCES: readonly SourceConfig[] = [
   },
   {
     id: 'cyclingweekly',
-    name: 'Cycling Weekly',
     feedUrl: 'https://www.cyclingweekly.com/feeds.xml',
     sectionPaths: {
       racing: 'racing',

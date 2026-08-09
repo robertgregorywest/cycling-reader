@@ -14,7 +14,24 @@
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+
+    // The Worker's JSX runs on the server and never hydrates, so it is Hono's
+    // own rather than React's. This lives in the root configuration because
+    // wrangler builds the Worker with esbuild and takes its JSX settings from
+    // here — see `tsconfig.worker.json` for the rest of the Worker's types.
+    "jsx": "react-jsx",
+    "jsxImportSource": "hono/jsx"
   },
-  "include": ["src", "tests", "scripts", "vitest.config.ts"]
+  // The Node half: ingest, Extraction, and the scripts around them. The Worker
+  // is checked separately because it runs on workerd, where `node` types are a
+  // lie and D1 is a global.
+  "include": [
+    "src/ingest",
+    "src/shared",
+    "scripts",
+    "tests/node",
+    "tests/support",
+    "vitest.config.ts"
+  ]
 }

@@ -48,7 +48,13 @@ Extraction, its fixture corpus, Revision detection, and the Ingest Run into
 either store are built, and a scheduled workflow runs it into D1 every two
 hours. Each Run records itself and asserts its own success, failing on a Feed
 that parses to nothing, on admitting nothing the Feed says is new, and on
-Extraction falling back to Readability too often. The Worker is not built.
+Extraction falling back to Readability too often.
+
+The Worker serves the index: a passphrase exchanged for a signed cookie, and
+behind it a compact list of Articles — headline, teaser, thumbnail, Source and
+relative time — deployed on every push to `main`. Until the article view
+arrives, every entry links out to its Source. The article view, Read state,
+filtering, Saving and Expiry are not built.
 
 ## Working on it
 
@@ -64,6 +70,9 @@ pnpm ingest        # an Ingest Run against both live Feeds, into local/
 pnpm ingest --db /tmp/reader.db --source cyclingweekly
 pnpm ingest --store d1  # what the schedule runs: the same Run, into D1
 pnpm migrate       # apply migrations/ to D1; --list to see what is outstanding
+pnpm dev           # the Worker, locally, against the live D1 database
+pnpm run deploy    # what the push-to-main workflow runs
+pnpm --silent passphrase  # hash a passphrase for the PASSPHRASE_HASH secret
 ```
 
 `pnpm ingest`, `pnpm ingest --store d1` and `pnpm migrate` are the commands

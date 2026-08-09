@@ -151,24 +151,59 @@ problem.
 
 ### Choose a passphrase
 
-It guards everything. Set it directly as a Worker secret; it should not be
-written down in this repository, in an issue, or in a chat transcript.
+It guards everything, and it is the only thing that does: there is no
+Cloudflare Access in front of the reader, because Access cannot protect a
+`workers.dev` hostname
+([ADR-0003](adr/0003-passphrase-auth-not-cloudflare-access.md)).
+
+Make it long and generated — a password manager's passphrase generator, four or
+five words, or thirty-odd random characters. The Worker hashes it with
+PBKDF2-HMAC-SHA-256 at a deliberately modest iteration count, because a Worker
+on the free plan gets 10 ms of CPU per request and an iteration count tuned for
+a server would make signing in impossible. Length is therefore doing the work
+that iterations would elsewhere.
+
+Store it in your password manager. It should not be written down in this
+repository, in an issue, or in a chat transcript.
+
+### Set the two Worker secrets
+
+`PASSPHRASE_HASH` is a hash of the passphrase, never the passphrase itself.
+`pnpm passphrase` prompts for it — so it does not reach your shell history —
+and prints only the hash:
 
 ```sh
-npx wrangler secret put PASSPHRASE_HASH
-npx wrangler secret put COOKIE_SECRET
+pnpm --silent passphrase | npx wrangler secret put PASSPHRASE_HASH
 ```
 
-For `COOKIE_SECRET`, paste the output of:
+The value it produces looks like `pbkdf2-sha256$20000$<salt>$<hash>`: it
+carries its own algorithm, iteration count and salt, so a secret made today
+still verifies if those ever change.
+
+`COOKIE_SECRET` signs the session cookie. Any long random string; this is the
+one to paste:
 
 ```sh
-openssl rand -base64 32
+openssl rand -base64 32 | npx wrangler secret put COOKIE_SECRET
 ```
 
-`PASSPHRASE_HASH` is a hash of your chosen passphrase, not the passphrase
-itself. The exact command to produce it depends on the algorithm the Worker
-uses and is documented in ticket
-[#7](https://github.com/robertgregorywest/cycling-reader/issues/7).
+Changing either one signs every device out, which is also how to sign every
+device out.
+
+### Keep the same two locally
+
+`pnpm dev` runs the Worker against the live D1 database and needs both. Add
+them to the git-ignored `.dev.vars` alongside the Cloudflare credentials from
+step 8:
+
+```sh
+PASSPHRASE_HASH=…      # pnpm --silent passphrase
+COOKIE_SECRET=…        # openssl rand -base64 32
+```
+
+They can be different from the deployed ones — a throwaway passphrase for local
+work is fine, and arguably better. `pnpm test` needs neither: the suite binds
+its own.
 
 ### Choose a workers.dev subdomain
 
@@ -198,5 +233,5 @@ to a third party, and nothing to sign up for.
 | --- | --- |
 | #2–#4 | Node 22.13, pnpm |
 | #5 | Cloudflare account, wrangler login, D1 database, API token, three GitHub Secrets, the same three in `.dev.vars`, `pnpm migrate`, Actions write permission |
-| #7 | A passphrase, a `workers.dev` subdomain |
+| #7 | A passphrase, two Worker secrets, a `workers.dev` subdomain |
 | #12 | An R2 bucket — the only step that may want a payment method |

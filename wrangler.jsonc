@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "cycling-reader",
+  "main": "src/worker/index.tsx",
+  "compatibility_date": "2026-08-01",
+
+  // The reading experience is private and there is nothing here for a crawler
+  // to reach anyway (ADR-0003), but a `workers.dev` subdomain is public DNS.
+  "workers_dev": true,
+
+  // Logs for the one thing that cannot be reproduced locally: what the live
+  // Worker did. Free, and off by default.
+  "observability": { "enabled": true },
+
+  // The database an Ingest Run writes and the Worker only reads (ADR-0001).
+  //
+  // The id is an identifier and not a credential — it grants nothing without
+  // an API token scoped to the account — so it is committed here, unlike the
+  // token, which is a GitHub Secret and a Worker secret and never in the
+  // repository (ADR-0002).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cycling-reader",
+      "database_id": "166500c2-c36e-49c7-8591-7d4787d1218e",
+    },
+  ],
+}

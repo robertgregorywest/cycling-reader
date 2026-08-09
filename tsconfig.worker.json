@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Not `node`: the Worker runs on workerd, where `process` and `fs` do not
+    // exist and `D1Database` does. Checking it against Node's types would
+    // accept code that cannot run.
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers/types"]
+  },
+  "include": ["src/worker", "src/shared", "tests/worker"]
+}

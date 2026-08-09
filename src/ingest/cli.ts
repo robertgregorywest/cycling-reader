@@ -58,6 +58,7 @@ function print(database: string, report: IngestReport): void {
   console.log(`started     ${report.startedAt}`)
   console.log(`finished    ${report.finishedAt}`)
   console.log(`admitted    ${report.admitted}`)
+  console.log(`revised     ${report.revised}`)
   console.log(`skipped     ${counts(report.skipped)}`)
   console.log(`extraction  ${counts(report.extractionMethods)}`)
   console.log()
@@ -66,6 +67,7 @@ function print(database: string, report: IngestReport): void {
     console.log(`${source.source}`)
     console.log(`  feed items  ${source.feedItems}`)
     console.log(`  admitted    ${source.admitted}`)
+    console.log(`  revised     ${source.revised}`)
     console.log(`  skipped     ${counts(source.skipped)}`)
     console.log(`  extraction  ${counts(source.extractionMethods)}`)
   }

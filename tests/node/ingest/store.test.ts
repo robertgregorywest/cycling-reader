@@ -56,8 +56,10 @@ describe('an Article the store holds', () => {
     await store.addArticle(ARTICLE, [])
 
     expect(await store.article('cyclingweekly', ARTICLE.guid)).toBeNull()
-    expect(await store.knownGuids('cyclingweekly', [ARTICLE.guid])).toEqual(new Set())
-    expect(await store.knownGuids('cyclingnews', [ARTICLE.guid])).toEqual(new Set([ARTICLE.guid]))
+    expect(await store.knownRevisions('cyclingweekly', [ARTICLE.guid])).toEqual(new Map())
+    expect(await store.knownRevisions('cyclingnews', [ARTICLE.guid])).toEqual(
+      new Map([[ARTICLE.guid, ARTICLE.updatedAt]]),
+    )
   })
 
   it('cannot be written twice under the same key', async () => {
@@ -125,6 +127,56 @@ describe('the schema an Ingest Run writes through', () => {
   })
 })
 
+describe('an Article the store revises', () => {
+  const REVISED: Article = {
+    ...ARTICLE,
+    headline: 'An Article, with the results',
+    teaser: 'A fuller teaser',
+    updatedAt: '2026-08-09T09:30:00.000Z',
+    bodyHtml: '<p>A body.</p><table><tr><td>1</td></tr></table>',
+    textLength: 8,
+  }
+
+  it('carries what the Source changed, including its Revision timestamp', async () => {
+    await store.addArticle(ARTICLE, [])
+    await store.reviseArticle(REVISED, [])
+
+    const article = await store.article('cyclingnews', ARTICLE.guid)
+    expect(article?.headline).toBe(REVISED.headline)
+    expect(article?.teaser).toBe(REVISED.teaser)
+    expect(article?.bodyHtml).toBe(REVISED.bodyHtml)
+    expect(article?.textLength).toBe(REVISED.textLength)
+    expect(article?.updatedAt).toBe(REVISED.updatedAt)
+  })
+
+  it('keeps the place in publication order it was admitted at', async () => {
+    await store.addArticle(ARTICLE, [])
+    await store.reviseArticle({ ...REVISED, publishedAt: '2026-08-09T09:30:00.000Z' }, [])
+
+    const article = await store.article('cyclingnews', ARTICLE.guid)
+    expect(article?.publishedAt).toBe(ARTICLE.publishedAt)
+    expect(article?.firstSeenAt).toBe(ARTICLE.firstSeenAt)
+  })
+
+  it('holds the images of the body it now has, not of the body it had', async () => {
+    await store.addArticle(ARTICLE, [
+      { position: 0, url: 'https://cdn.mos.cms.futurecdn.net/one.jpg', alt: 'One', caption: null },
+      { position: 1, url: 'https://cdn.mos.cms.futurecdn.net/two.jpg', alt: 'Two', caption: null },
+    ])
+    await store.reviseArticle(REVISED, [
+      { position: 0, url: 'https://cdn.mos.cms.futurecdn.net/three.jpg', alt: 'Three', caption: null },
+    ])
+
+    expect((await store.images('cyclingnews', ARTICLE.guid)).map((image) => image.url)).toEqual([
+      'https://cdn.mos.cms.futurecdn.net/three.jpg',
+    ])
+  })
+
+  it('refuses to revise an Article it does not hold', async () => {
+    await expect(store.reviseArticle(REVISED, [])).rejects.toThrow(/No Article to revise/)
+  })
+})
+
 describe('a database file the store opens', () => {
   let directory: string
 
@@ -145,8 +197,8 @@ describe('a database file the store opens', () => {
 
     const second = SqliteArticleStore.open(path)
     try {
-      expect(await second.knownGuids('cyclingnews', [ARTICLE.guid])).toEqual(
-        new Set([ARTICLE.guid]),
+      expect(await second.knownRevisions('cyclingnews', [ARTICLE.guid])).toEqual(
+        new Map([[ARTICLE.guid, ARTICLE.updatedAt]]),
       )
     } finally {
       second.close()

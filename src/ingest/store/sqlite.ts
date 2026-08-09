@@ -41,15 +41,18 @@ export class SqliteArticleStore implements ArticleStore {
     this.database.close()
   }
 
-  async knownGuids(source: SourceId, guids: readonly string[]): Promise<ReadonlySet<string>> {
-    if (guids.length === 0) return new Set()
+  async knownRevisions(
+    source: SourceId,
+    guids: readonly string[],
+  ): Promise<ReadonlyMap<string, string>> {
+    if (guids.length === 0) return new Map()
 
     const placeholders = guids.map(() => '?').join(', ')
     const rows = this.database
-      .prepare(`SELECT guid FROM articles WHERE source = ? AND guid IN (${placeholders})`)
-      .all(source, ...guids) as { guid: string }[]
+      .prepare(`SELECT guid, updated_at FROM articles WHERE source = ? AND guid IN (${placeholders})`)
+      .all(source, ...guids) as { guid: string; updated_at: string }[]
 
-    return new Set(rows.map((row) => row.guid))
+    return new Map(rows.map((row) => [row.guid, row.updated_at]))
   }
 
   async addArticle(article: Article, images: readonly ArticleImage[]): Promise<void> {
@@ -83,25 +86,81 @@ export class SqliteArticleStore implements ArticleStore {
           article.firstSeenAt,
         )
 
-      const insertImage = this.database.prepare(
-        `INSERT INTO article_images (source, guid, position, url, alt, caption)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      for (const image of images) {
-        insertImage.run(
-          article.source,
-          article.guid,
-          image.position,
-          image.url,
-          image.alt,
-          image.caption,
-        )
-      }
+      this.writeImages(article, images)
 
       this.database.exec('COMMIT')
     } catch (error) {
       this.database.exec('ROLLBACK')
       throw error
+    }
+  }
+
+  async reviseArticle(article: Article, images: readonly ArticleImage[]): Promise<void> {
+    // The columns listed here are the ones the Source owns. read_at and
+    // saved_at are the reader's; published_at and first_seen_at place the
+    // Article in the index, and a Revision is not news. Naming the columns
+    // explicitly rather than replacing the row is what keeps that true.
+    this.database.exec('BEGIN')
+    try {
+      const revised = this.database
+        .prepare(
+          `UPDATE articles SET
+             url = ?, headline = ?, teaser = ?, author = ?, section = ?,
+             updated_at = ?, body_html = ?, extraction_method = ?, text_length = ?,
+             hero_image_url = ?, hero_image_alt = ?
+           WHERE source = ? AND guid = ?`,
+        )
+        .run(
+          article.url,
+          article.headline,
+          article.teaser,
+          article.author,
+          article.section,
+          article.updatedAt,
+          article.bodyHtml,
+          article.extractionMethod,
+          article.textLength,
+          article.heroImageUrl,
+          article.heroImageAlt,
+          article.source,
+          article.guid,
+        )
+
+      // Revising an Article the store does not hold means the Run decided a
+      // Revision against something that is not there. ADR-0006: say so.
+      if (revised.changes === 0) {
+        throw new Error(`No Article to revise: ${article.source} ${article.guid}`)
+      }
+
+      // The new body's images replace the old body's rather than joining them:
+      // an image at position 3 of a revised Article is the third image the
+      // reader now sees, not the third one they saw yesterday.
+      this.database
+        .prepare('DELETE FROM article_images WHERE source = ? AND guid = ?')
+        .run(article.source, article.guid)
+      this.writeImages(article, images)
+
+      this.database.exec('COMMIT')
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  private writeImages(article: Article, images: readonly ArticleImage[]): void {
+    const insertImage = this.database.prepare(
+      `INSERT INTO article_images (source, guid, position, url, alt, caption)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    for (const image of images) {
+      insertImage.run(
+        article.source,
+        article.guid,
+        image.position,
+        image.url,
+        image.alt,
+        image.caption,
+      )
     }
   }
 

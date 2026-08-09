@@ -47,6 +47,13 @@ advertised it. The `travel` Article is served
 `cyclingweekly-redesigned-body-container`, so that one Extraction in every Run
 takes the Readability path.
 
+### Revisions
+
+No fixture records a Revision, because a Revision is a Feed served twice rather
+than a second document: the tests re-serve the same Feed with one item's
+`updated` — or, for the item carrying none, its `pubDate` — advanced, which is
+exactly what a Source does when a race report gains its results.
+
 ### The two normalisations
 
 Each file holds the six items above out of the fifty the Feed served, and the

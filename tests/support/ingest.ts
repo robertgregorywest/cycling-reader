@@ -1,3 +1,5 @@
+import { DatabaseSync } from 'node:sqlite'
+import { JSDOM, VirtualConsole } from 'jsdom'
 import { SOURCES } from '../../src/ingest/config.ts'
 import { parseFeed } from '../../src/ingest/feed.ts'
 import type { SourceId } from '../../src/shared/article.ts'
@@ -55,4 +57,87 @@ export function fetchPageFromCorpus(url: string): Promise<string> {
 export function fixedClock(instant: string): () => Date {
   const date = new Date(instant)
   return () => date
+}
+
+/**
+ * A page fetcher that remembers what it was asked for, so that a test can say
+ * an Article was *not* re-fetched — which is the whole of "unchanged" and is
+ * invisible in the store, because an unchanged Article re-Extracted would look
+ * exactly like one left alone.
+ */
+export function recordingPageFetcher(): {
+  readonly fetchPage: (url: string) => Promise<string>
+  readonly fetched: readonly string[]
+} {
+  const fetched: string[] = []
+  return {
+    fetched,
+    fetchPage(url: string) {
+      fetched.push(url)
+      return fetchPageFromCorpus(url)
+    },
+  }
+}
+
+/**
+ * The Source's Feed re-served with one item's timestamp advanced: a Revision
+ * as a Feed expresses one, rather than as the store would.
+ *
+ * `updated` is where three quarters of items carry their Revision; `pubDate`
+ * is what the fifth carrying no `updated` are judged by. The element is
+ * created if the item has none, because gaining an `updated` is itself how a
+ * Source announces the first Revision of such an item.
+ */
+export function fetchFeedRevising(
+  source: SourceId,
+  guid: string,
+  elements: readonly ('updated' | 'pubDate')[],
+  to: Date,
+): (url: string) => Promise<string> {
+  return async (url: string) => {
+    const xml = await fetchFeedFromCorpus(url)
+    const config = SOURCES.find((candidate) => candidate.feedUrl === url)
+    if (config?.id !== source) return xml
+    return elements.reduce((revised, element) => advanceTimestamp(revised, guid, element, to), xml)
+  }
+}
+
+/** Feed dates are RFC 822, which is what `toUTCString` writes. */
+function advanceTimestamp(xml: string, guid: string, element: string, to: Date): string {
+  const window = new JSDOM(xml, { contentType: 'text/xml', virtualConsole: new VirtualConsole() })
+    .window
+  const document = window.document
+
+  const item = Array.from(document.getElementsByTagName('item')).find((candidate) =>
+    Array.from(candidate.children).some(
+      (child) => child.nodeName === 'guid' && child.textContent?.trim() === guid,
+    ),
+  )
+  if (item === undefined) throw new Error(`No Feed item with guid ${guid}`)
+
+  const existing = Array.from(item.children).find((child) => child.nodeName === element)
+  const target = existing ?? item.appendChild(document.createElement(element))
+  target.textContent = to.toUTCString()
+
+  return new window.XMLSerializer().serializeToString(document)
+}
+
+/**
+ * Set the reading state on a stored Article, written directly through SQL
+ * because it is the Worker's to write and an ingest store has no business
+ * doing so. Needs a store opened on a file rather than in memory.
+ */
+export function setReadingState(
+  database: string,
+  article: { readonly source: SourceId; readonly guid: string },
+  state: { readonly readAt: string | null; readonly savedAt: string | null },
+): void {
+  const connection = new DatabaseSync(database)
+  try {
+    connection
+      .prepare('UPDATE articles SET read_at = ?, saved_at = ? WHERE source = ? AND guid = ?')
+      .run(state.readAt, state.savedAt, article.source, article.guid)
+  } finally {
+    connection.close()
+  }
 }

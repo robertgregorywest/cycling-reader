@@ -1,11 +1,22 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { SOURCES, sourceConfig } from '../../../src/ingest/config.ts'
 import { ingest, type IngestReport } from '../../../src/ingest/run.ts'
 import { SqliteArticleStore } from '../../../src/ingest/store/sqlite.ts'
 import type { SourceId, StoredArticle, StoredArticleImage } from '../../../src/shared/article.ts'
 import { parseFeed } from '../../../src/ingest/feed.ts'
+import { readFixture } from '../../fixtures/corpus.ts'
 import { readFeedFixture } from '../../fixtures/feeds.ts'
-import { fetchFeedFromCorpus, fetchPageFromCorpus, fixedClock } from '../../support/ingest.ts'
+import {
+  fetchFeedFromCorpus,
+  fetchFeedRevising,
+  fetchPageFromCorpus,
+  fixedClock,
+  recordingPageFetcher,
+  setReadingState,
+} from '../../support/ingest.ts'
 
 /**
  * The Ingest Run is the seam: one entry point, its dependencies passed in, a
@@ -76,10 +87,164 @@ describe('a Run repeated immediately', () => {
     const second = await run()
 
     expect(second.admitted).toBe(0)
+    expect(second.revised).toBe(0)
     expect(second.skipped['already-ingested']).toBe(7)
     expect(second.extractionMethods).toEqual({ targeted: 0, readability: 0, stub: 0 })
   })
+
+  it('re-fetches no Article whose timestamps have not moved', async () => {
+    await run()
+    const pages = recordingPageFetcher()
+    await run({ fetchPage: pages.fetchPage })
+
+    expect(pages.fetched).toEqual([])
+  })
 })
+
+/**
+ * Three quarters of items carry an `updated` later than their `pubDate`, so
+ * this is a primary path: a race report admitted before the finish gains its
+ * results table later, and the reader is owed it.
+ */
+describe('a Revision', () => {
+  /** The race report is the Article Revisions are exercised against. */
+  const RACE_REPORT = feedItem('cyclingnews', '/pro-cycling/racing/')
+  /** The Stub — an item carrying no `updated`, judged by its `pubDate`. */
+  const NO_UPDATED = feedItem('cyclingnews', '/pro-cycling/teams-riders/')
+  const REVISED_AT = new Date('2026-08-09T09:30:00.000Z')
+
+  /** The Feed as the Source serves it once the race report has been Revised. */
+  function revisedFeed(
+    guid = RACE_REPORT.guid,
+    elements: readonly ('updated' | 'pubDate')[] = ['updated'],
+  ) {
+    return fetchFeedRevising('cyclingnews', guid, elements, REVISED_AT)
+  }
+
+  function runCyclingnews(
+    overrides: Partial<Parameters<typeof ingest>[0]> = {},
+  ): Promise<IngestReport> {
+    return run({ sources: [sourceConfig('cyclingnews')], ...overrides })
+  }
+
+  it('re-fetches and re-Extracts the Article', async () => {
+    await runCyclingnews()
+    const pages = recordingPageFetcher()
+    const report = await runCyclingnews({ fetchFeed: revisedFeed(), fetchPage: pages.fetchPage })
+
+    expect(pages.fetched).toEqual([RACE_REPORT.url])
+    expect(report.extractionMethods).toEqual({ targeted: 1, readability: 0, stub: 0 })
+  })
+
+  it('is reported apart from the Articles admitted', async () => {
+    await runCyclingnews()
+    const report = await runCyclingnews({ fetchFeed: revisedFeed() })
+
+    expect(report.admitted).toBe(0)
+    expect(report.revised).toBe(1)
+    expect(report.sources.map((source) => [source.admitted, source.revised])).toEqual([[0, 1]])
+    expect(report.skipped['already-ingested']).toBe(3)
+  })
+
+  it('is detected from the published timestamp when the Feed carries no updated', async () => {
+    await runCyclingnews()
+    const report = await runCyclingnews({ fetchFeed: revisedFeed(NO_UPDATED.guid, ['pubDate']) })
+
+    expect(report.revised).toBe(1)
+    expect((await store.article('cyclingnews', NO_UPDATED.guid))?.updatedAt).toBe(
+      REVISED_AT.toISOString(),
+    )
+  })
+
+  it('advances the stored Revision timestamp, so the next Run leaves it alone', async () => {
+    await runCyclingnews()
+    await runCyclingnews({ fetchFeed: revisedFeed() })
+
+    expect((await store.article('cyclingnews', RACE_REPORT.guid))?.updatedAt).toBe(
+      REVISED_AT.toISOString(),
+    )
+
+    const pages = recordingPageFetcher()
+    const third = await runCyclingnews({ fetchFeed: revisedFeed(), fetchPage: pages.fetchPage })
+
+    expect(pages.fetched).toEqual([])
+    expect(third.revised).toBe(0)
+  })
+
+  it('does not move the Article in publication order', async () => {
+    await runCyclingnews()
+    const admitted = await store.article('cyclingnews', RACE_REPORT.guid)
+    // The Source moved `pubDate` as well; a corrected typo is still not news.
+    const report = await runCyclingnews({
+      fetchFeed: revisedFeed(RACE_REPORT.guid, ['updated', 'pubDate']),
+    })
+
+    expect(report.revised).toBe(1)
+    const revised = await store.article('cyclingnews', RACE_REPORT.guid)
+    expect(revised?.publishedAt).toBe(admitted?.publishedAt)
+    expect(revised?.firstSeenAt).toBe(admitted?.firstSeenAt)
+  })
+
+  it('replaces the images the old body held rather than adding to them', async () => {
+    await runCyclingnews()
+    const before = await store.images('cyclingnews', RACE_REPORT.guid)
+    // The page the Revision fetches is a different one, so the images the
+    // reader is now owed are different images.
+    await runCyclingnews({
+      fetchFeed: revisedFeed(),
+      fetchPage: (url) =>
+        url === RACE_REPORT.url
+          ? Promise.resolve(readFixture('cyclingnews-news-item'))
+          : fetchPageFromCorpus(url),
+    })
+
+    const after = await store.images('cyclingnews', RACE_REPORT.guid)
+    expect(after.map((image) => image.position)).toEqual(after.map((_, index) => index))
+    expect(after.map((image) => image.url)).not.toEqual(before.map((image) => image.url))
+    expect(after.length).toBeLessThan(before.length)
+  })
+
+  describe('against an Article the reader has Read and Saved', () => {
+    let directory: string
+
+    beforeEach(() => {
+      // The reading state lives in a file the Worker would also write to, so
+      // this Run writes to a file rather than to memory.
+      store.close()
+      directory = mkdtempSync(join(tmpdir(), 'cycling-reader-'))
+      store = SqliteArticleStore.open(join(directory, 'reader.db'))
+      return () => rmSync(directory, { recursive: true, force: true })
+    })
+
+    it('leaves the reading state exactly as it was', async () => {
+      await runCyclingnews()
+      setReadingState(
+        join(directory, 'reader.db'),
+        { source: 'cyclingnews', guid: RACE_REPORT.guid },
+        { readAt: '2026-08-09T07:00:00.000Z', savedAt: '2026-08-09T07:01:00.000Z' },
+      )
+
+      const report = await runCyclingnews({ fetchFeed: revisedFeed() })
+
+      expect(report.revised).toBe(1)
+      const article = await store.article('cyclingnews', RACE_REPORT.guid)
+      expect(article?.readAt).toBe('2026-08-09T07:00:00.000Z')
+      expect(article?.savedAt).toBe('2026-08-09T07:01:00.000Z')
+      expect(article?.updatedAt).toBe(REVISED_AT.toISOString())
+    })
+  })
+})
+
+/** The one item a Source's Feed carries beneath a path. */
+function feedItem(source: SourceId, path: string) {
+  const found = parseFeed(readFeedFixture(source), source).filter((item) =>
+    new URL(item.url).pathname.startsWith(path),
+  )
+  if (found.length !== 1) {
+    throw new Error(`Expected one ${source} item beneath ${path}, found ${found.length}`)
+  }
+  return found[0]!
+}
 
 describe('the Section Allowlist', () => {
   it('maps each Source\'s URL paths into the shared Section vocabulary', async () => {
@@ -259,7 +424,7 @@ async function allArticles(): Promise<readonly StoredArticle[]> {
 /** Every guid the store holds for a Source, asked through the interface. */
 async function guidsOf(source: SourceId): Promise<readonly string[]> {
   const guids = parseFeed(readFeedFixture(source), source).map((item) => item.guid)
-  return [...(await store.knownGuids(source, guids))]
+  return [...(await store.knownRevisions(source, guids)).keys()]
 }
 
 async function articleBeneath(path: string): Promise<StoredArticle | null> {

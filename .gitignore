@@ -14,10 +14,12 @@ dist/
 build/
 .wrangler/
 
-# Local D1 / test databases
+# Local D1 / test databases. The reading content is private (ADR-0002); an
+# Ingest Run against the live Feeds writes real Articles into local/.
 *.sqlite
 *.sqlite3
 *.db
+local/
 
 # Editor / OS
 .DS_Store

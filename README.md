@@ -43,8 +43,8 @@ Lifecycle  stream expires at 30 days; saving mirrors images and keeps
 
 ## Status
 
-Extraction and its fixture corpus are built. The Ingest Run, the schema and the
-Worker are not.
+Extraction, its fixture corpus, and the Ingest Run into a local SQLite store
+are built. Revision detection, D1, the health tripwires and the Worker are not.
 
 ## Working on it
 
@@ -56,9 +56,17 @@ pnpm extract                          # list the fixture corpus
 pnpm extract cyclingnews-race-report  # print an Extraction, to inspect by eye
 pnpm extract cyclingnews-race-report --text
 pnpm golden:update # after changing Extraction on purpose; read the diff
+pnpm ingest        # an Ingest Run against both live Feeds, into local/
+pnpm ingest --db /tmp/reader.db --source cyclingweekly
 ```
 
+`pnpm ingest` is the only command here that touches the network. It writes a
+SQLite file, applying the same migrations D1 runs, so an Ingest Run can be
+inspected by opening the database. The file is git-ignored: the repository is
+public and the reading content is not.
+
 [`src/README.md`](src/README.md) explains the source layout;
+[`migrations/`](migrations/) holds the schema both stores run against;
 [`tests/fixtures/README.md`](tests/fixtures/README.md) explains the corpus and
 how to refresh it after a Source redesign.
 

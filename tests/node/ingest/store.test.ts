@@ -100,6 +100,7 @@ describe.each(IMPLEMENTATIONS)('$name', ({ open }) => {
         ...ARTICLE,
         readAt: null,
         savedAt: null,
+        heroMirrorKey: null,
       })
     })
 

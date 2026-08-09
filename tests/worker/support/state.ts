@@ -31,3 +31,39 @@ export async function readAt(source: string, guid: string): Promise<string | nul
 
   return row?.read_at ?? null
 }
+
+/** When the reader Saved an Article, or null while it is Stream — and so still
+ * subject to Expiry. */
+export async function savedAt(source: string, guid: string): Promise<string | null> {
+  const row = await env.DB.prepare('SELECT saved_at FROM articles WHERE source = ? AND guid = ?')
+    .bind(source, guid)
+    .first<{ saved_at: string | null }>()
+
+  return row?.saved_at ?? null
+}
+
+/** The hero image's Mirror key, as Saving recorded it. */
+export async function heroMirrorKey(source: string, guid: string): Promise<string | null> {
+  const row = await env.DB.prepare(
+    'SELECT hero_mirror_key FROM articles WHERE source = ? AND guid = ?',
+  )
+    .bind(source, guid)
+    .first<{ hero_mirror_key: string | null }>()
+
+  return row?.hero_mirror_key ?? null
+}
+
+/** The Mirror key recorded against each of an Article's body images, in the
+ * order they are read. */
+export async function imageMirrorKeys(
+  source: string,
+  guid: string,
+): Promise<readonly (string | null)[]> {
+  const { results } = await env.DB.prepare(
+    'SELECT mirror_key FROM article_images WHERE source = ? AND guid = ? ORDER BY position',
+  )
+    .bind(source, guid)
+    .all<{ mirror_key: string | null }>()
+
+  return results.map((row) => row.mirror_key)
+}

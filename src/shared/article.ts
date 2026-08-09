@@ -40,6 +40,9 @@ export interface Article {
 export interface StoredArticle extends Article {
   readonly readAt: string | null
   readonly savedAt: string | null
+  /** The hero image's Mirrored copy, written at the moment of Saving. Null for
+   * everything still in the Stream. */
+  readonly heroMirrorKey: string | null
 }
 
 /**

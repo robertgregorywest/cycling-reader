@@ -29,4 +29,11 @@ beforeEach(async () => {
     // One row, seeded by the migration, so it is reset rather than removed.
     env.DB.prepare('UPDATE app_state SET last_visit_at = NULL'),
   ])
+
+  // The bucket Mirroring writes to, emptied alongside the database for the same
+  // reason: a Mirrored object left behind by the previous test is an image
+  // Saving would find already there and decline to copy, which is exactly the
+  // thing several of these tests are asserting about.
+  const { objects } = await env.MIRROR.list()
+  if (objects.length > 0) await env.MIRROR.delete(objects.map((object) => object.key))
 })

@@ -7,8 +7,17 @@
  * place.
  */
 export interface Env {
-  /** The reader's D1 database. The Worker only ever reads from it (ADR-0001). */
+  /**
+   * The reader's D1 database. The Worker never writes an Article's content
+   * (ADR-0001) — only the reader's own state: Read, Last Visit, Saved.
+   */
   readonly DB: D1Database
+
+  /**
+   * Where Mirroring puts the Archive's images, written at the moment of Saving
+   * and read by the route that serves them back (ADR-0009).
+   */
+  readonly MIRROR: R2Bucket
 
   /**
    * The encoded hash of the passphrase, as `pnpm passphrase` produces it. Not

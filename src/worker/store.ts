@@ -3,6 +3,7 @@ import type { ExtractionMethod } from '../shared/extraction.ts'
 import type { Section } from '../shared/section.ts'
 import type { IndexFilter } from './filters.ts'
 import { NO_FILTER } from './filters.ts'
+import type { MirrorKeys } from './mirror.ts'
 
 /**
  * What the reader reads. The Worker never writes an Article and never extracts
@@ -46,6 +47,14 @@ export interface IndexEntry {
    * Always false for an Article never Read, where there is no "since".
    */
   readonly isUpdated: boolean
+  /** Deliberately kept in the Stream's own listing rather than removed from
+   * it: Saving promotes an Article to the Archive, and an Article that
+   * vanished from the index on being Saved would make the control that Saved
+   * it look like a control that hid it. */
+  readonly isSaved: boolean
+  /** The hero image's Mirrored copy, once there is one. Rendering prefers it,
+   * so a Saved Article survives its Source's CDN moving on. */
+  readonly heroMirrorKey: string | null
 }
 
 /**
@@ -68,10 +77,19 @@ export const INDEX_LIMIT = 100
 const NEWEST_FIRST = 'published_at DESC, source DESC, guid DESC'
 const OLDEST_FIRST = 'published_at ASC, source ASC, guid ASC'
 
-const selectIndex = (filter: IndexFilter): string => `SELECT
+/**
+ * Which collection is being listed: the whole reader, or the Archive alone.
+ *
+ * The Archive is a destination and not a chip on the index (ADR-0009), so this
+ * is not part of `IndexFilter` — nothing in a query string sets it, and no link
+ * carries it. It is which page is being rendered.
+ */
+export type Collection = 'everything' | 'archive'
+
+const selectIndex = (filter: IndexFilter, collection: Collection): string => `SELECT
   source, guid, url, headline, teaser, section, published_at, updated_at,
-  hero_image_url, extraction_method, read_at
-FROM articles${where(filter)}
+  hero_image_url, hero_mirror_key, extraction_method, read_at, saved_at
+FROM articles${where(filter, collection)}
 ORDER BY ${NEWEST_FIRST}
 LIMIT ?`
 
@@ -80,20 +98,24 @@ LIMIT ?`
  * below, because the two are read together and a placeholder counted in one
  * order and filled in the other is a bug that still returns rows.
  *
+ * The collection adds a condition and never a placeholder — it is which page
+ * this is, not something the reader typed.
+ *
  * The fragments are fixed text and the values are always bound, so a query
  * parameter never reaches the database as SQL.
  */
-function conditions(filter: IndexFilter): readonly string[] {
+function conditions(filter: IndexFilter, collection: Collection = 'everything'): readonly string[] {
   const conditions: string[] = []
 
   if (filter.section !== null) conditions.push('section = ?')
   if (filter.source !== null) conditions.push('source = ?')
+  if (collection === 'archive') conditions.push('saved_at IS NOT NULL')
 
   return conditions
 }
 
-function where(filter: IndexFilter): string {
-  const clauses = conditions(filter)
+function where(filter: IndexFilter, collection: Collection = 'everything'): string {
+  const clauses = conditions(filter, collection)
 
   return clauses.length === 0 ? '' : `\nWHERE ${clauses.join(' AND ')}`
 }
@@ -117,8 +139,10 @@ interface IndexRow {
   published_at: string
   updated_at: string
   hero_image_url: string | null
+  hero_mirror_key: string | null
   extraction_method: string
   read_at: string | null
+  saved_at: string | null
 }
 
 /**
@@ -134,8 +158,42 @@ export async function indexEntries(
   filter: IndexFilter = NO_FILTER,
   limit: number = INDEX_LIMIT,
 ): Promise<readonly IndexEntry[]> {
+  return listed(database, filter, 'everything', limit)
+}
+
+/**
+ * The Archive: the Articles that have been Saved, and only those.
+ *
+ * Listed exactly as the index lists the reader's Articles — the same row, the
+ * same order — because it is the same reading, only of the part that was kept
+ * on purpose. No filter: the Archive is what a year of deliberate keeping
+ * amounts to, which is a few hundred pieces and not a thing to need chips for.
+ *
+ * Unbounded by the Stream's hundred, and bounded by its own: the index's limit
+ * is a budget for rendering a day's news, and reaching the end of the Archive
+ * is something the reader is entitled to do.
+ */
+export async function archiveEntries(
+  database: D1Database,
+  limit: number = ARCHIVE_LIMIT,
+): Promise<readonly IndexEntry[]> {
+  return listed(database, NO_FILTER, 'archive', limit)
+}
+
+/**
+ * Far past what deliberate Saving produces, and still a bound: an unbounded
+ * query is a promise about a number nobody has measured.
+ */
+export const ARCHIVE_LIMIT = 500
+
+async function listed(
+  database: D1Database,
+  filter: IndexFilter,
+  collection: Collection,
+  limit: number,
+): Promise<readonly IndexEntry[]> {
   const { results } = await database
-    .prepare(selectIndex(filter))
+    .prepare(selectIndex(filter, collection))
     .bind(...binds(filter), limit)
     .all<IndexRow>()
 
@@ -169,14 +227,39 @@ export interface ReaderArticle {
   readonly isStub: boolean
   /** When this Article was first opened, or null if it never has been. */
   readonly readAt: string | null
+  /** When the reader Saved it, or null while it is Stream. The one act that
+   * exempts an Article from Expiry. */
+  readonly savedAt: string | null
+  /** The hero image's Mirrored copy, preferred over the Source CDN once it
+   * exists. */
+  readonly heroMirrorKey: string | null
+  /**
+   * The Mirrored copy of each image in the body, by the canonical Source URL
+   * the body carries. Empty for everything that has never been Saved, which is
+   * almost everything.
+   */
+  readonly mirrors: MirrorKeys
 }
 
 const SELECT_ARTICLE = `SELECT
   source, guid, url, headline, teaser, author, section,
   published_at, updated_at, body_html, extraction_method,
-  hero_image_url, hero_image_alt, read_at
+  hero_image_url, hero_image_alt, hero_mirror_key, read_at, saved_at
 FROM articles
 WHERE source = ? AND guid = ?`
+
+/**
+ * The body's images that have a Mirrored copy — by canonical URL, which is
+ * what the stored body carries and therefore what rendering has to match on.
+ *
+ * Read for every Article rather than for Saved ones alone, in the same batch as
+ * the Article itself, so that preferring the Mirror costs no round trip and
+ * needs no branch: an Article that has never been Saved simply answers with
+ * nothing.
+ */
+const SELECT_MIRRORS = `SELECT url, mirror_key
+FROM article_images
+WHERE source = ? AND guid = ? AND mirror_key IS NOT NULL`
 
 interface ArticleRow {
   source: string
@@ -192,7 +275,9 @@ interface ArticleRow {
   extraction_method: string
   hero_image_url: string | null
   hero_image_alt: string | null
+  hero_mirror_key: string | null
   read_at: string | null
+  saved_at: string | null
 }
 
 /** The Article at this Source and guid, or null — a guid typed wrong, or an
@@ -202,9 +287,19 @@ export async function readerArticle(
   source: string,
   guid: string,
 ): Promise<ReaderArticle | null> {
-  const row = await database.prepare(SELECT_ARTICLE).bind(source, guid).first<ArticleRow>()
+  const [article, mirrors] = await database.batch<Record<string, unknown>>([
+    database.prepare(SELECT_ARTICLE).bind(source, guid),
+    database.prepare(SELECT_MIRRORS).bind(source, guid),
+  ])
 
-  return row === null ? null : toReaderArticle(row)
+  const row = article?.results[0] as ArticleRow | undefined
+  if (row === undefined) return null
+
+  return toReaderArticle(row, mirrorKeysIn(mirrors?.results ?? []))
+}
+
+function mirrorKeysIn(rows: readonly Record<string, unknown>[]): MirrorKeys {
+  return new Map(rows.map((row) => [row['url'] as string, row['mirror_key'] as string]))
 }
 
 /**
@@ -393,7 +488,114 @@ export async function markAllRead(database: D1Database, now: Date): Promise<void
   ])
 }
 
-function toReaderArticle(row: ArticleRow): ReaderArticle {
+/**
+ * Every image an Article carries, which is what Mirroring is asked to copy.
+ *
+ * The hero comes from the Feed and sits on the Article; the rest were recorded
+ * at Extraction, in the order they are read. A Stub has the first and none of
+ * the second, and is Saveable for exactly that reason — the photography is
+ * most of what a Stub has.
+ *
+ * Null where there is no such Article: a link that sat in another tab until
+ * Expiry took what it pointed at.
+ */
+export interface ArticleImages {
+  readonly heroImageUrl: string | null
+  readonly body: readonly { readonly position: number; readonly url: string }[]
+}
+
+const SELECT_HERO = 'SELECT hero_image_url FROM articles WHERE source = ? AND guid = ?'
+
+const SELECT_IMAGE_URLS = `SELECT position, url
+FROM article_images
+WHERE source = ? AND guid = ?
+ORDER BY position`
+
+export async function articleImages(
+  database: D1Database,
+  source: string,
+  guid: string,
+): Promise<ArticleImages | null> {
+  const [hero, body] = await database.batch<Record<string, unknown>>([
+    database.prepare(SELECT_HERO).bind(source, guid),
+    database.prepare(SELECT_IMAGE_URLS).bind(source, guid),
+  ])
+
+  const article = hero?.results[0]
+  if (article === undefined) return null
+
+  return {
+    heroImageUrl: (article['hero_image_url'] as string | null) ?? null,
+    body: (body?.results ?? []).map((row) => ({
+      position: row['position'] as number,
+      url: row['url'] as string,
+    })),
+  }
+}
+
+const SAVE = 'UPDATE articles SET saved_at = ?, hero_mirror_key = ? WHERE source = ? AND guid = ?'
+
+const RECORD_MIRROR =
+  'UPDATE article_images SET mirror_key = ? WHERE source = ? AND guid = ? AND position = ?'
+
+/**
+ * Saved, with the keys of what was Mirrored to make it durable.
+ *
+ * One batch, which D1 runs as one transaction, and that is the whole point of
+ * the ordering: the images are already in the bucket by the time this is
+ * called, so an Article is never recorded Saved without its Mirror keys, and a
+ * failure here leaves it in the Stream with objects in the bucket that the next
+ * Saving will find and reuse rather than pay for twice.
+ *
+ * `saved_at` is set unconditionally rather than only when null. Unlike Read,
+ * where the first opening is the one that counts, Saving is a deliberate act
+ * and the moment it happened is the moment the reader last chose to keep this.
+ */
+export async function save(
+  database: D1Database,
+  article: { source: string; guid: string },
+  images: ArticleImages,
+  keys: MirrorKeys,
+  now: Date,
+): Promise<void> {
+  const heroKey = images.heroImageUrl === null ? null : (keys.get(images.heroImageUrl) ?? null)
+
+  await database.batch([
+    database.prepare(SAVE).bind(now.toISOString(), heroKey, article.source, article.guid),
+    ...images.body.flatMap((image) => {
+      const key = keys.get(image.url)
+      if (key === undefined) return []
+
+      return [
+        database.prepare(RECORD_MIRROR).bind(key, article.source, article.guid, image.position),
+      ]
+    }),
+  ])
+}
+
+const UNSAVE = 'UPDATE articles SET saved_at = NULL WHERE source = ? AND guid = ?'
+
+/**
+ * Un-Saved: back to the Stream, and back to Expiry.
+ *
+ * The Mirror keys stay where they are, and so do the objects. A key records
+ * that a copy of this photograph exists, which remains true; clearing it would
+ * send rendering back to the Source CDN while the reader's own copy sat in the
+ * bucket, and re-Saving would then pay to fetch what it already had.
+ *
+ * So un-Saving leaves bytes behind, deliberately and unswept: an object is
+ * shared by every Article carrying the same photograph, so deleting one needs
+ * reference counting, and the thing being counted is a few hundred kilobytes
+ * against a 10 GB tier (ADR-0009).
+ */
+export async function unsave(
+  database: D1Database,
+  article: { source: string; guid: string },
+): Promise<void> {
+  await database.prepare(UNSAVE).bind(article.source, article.guid).run()
+}
+
+function toReaderArticle(row: ArticleRow, mirrors: MirrorKeys): ReaderArticle {
   return {
     source: row.source as SourceId,
     guid: row.guid,
@@ -408,8 +610,11 @@ function toReaderArticle(row: ArticleRow): ReaderArticle {
     extractionMethod: row.extraction_method as ExtractionMethod,
     heroImageUrl: row.hero_image_url,
     heroImageAlt: row.hero_image_alt,
+    heroMirrorKey: row.hero_mirror_key,
     isStub: row.extraction_method === 'stub',
     readAt: row.read_at,
+    savedAt: row.saved_at,
+    mirrors,
   }
 }
 
@@ -493,9 +698,11 @@ function toIndexEntry(row: IndexRow): IndexEntry {
     section: row.section as Section,
     publishedAt: row.published_at,
     heroImageUrl: row.hero_image_url,
+    heroMirrorKey: row.hero_mirror_key,
     isStub: row.extraction_method === 'stub',
     isRead: row.read_at !== null,
     isUpdated: revisedSinceRead(row.updated_at, row.read_at),
+    isSaved: row.saved_at !== null,
   }
 }
 

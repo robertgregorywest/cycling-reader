@@ -32,4 +32,17 @@
       "database_id": "166500c2-c36e-49c7-8591-7d4787d1218e",
     },
   ],
+
+  // Where Mirroring puts the Archive's images, and the one thing the Worker
+  // writes that is not a column of the reader's own state (ADR-0009).
+  //
+  // A bucket name is an identifier and not a credential, exactly as the
+  // database id above is: reaching it needs an account-scoped token, which
+  // lives in GitHub Secrets and never here (ADR-0002).
+  "r2_buckets": [
+    {
+      "binding": "MIRROR",
+      "bucket_name": "cycling-reader-images",
+    },
+  ],
 }

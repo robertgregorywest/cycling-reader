@@ -5,9 +5,12 @@ import { presentBody } from '../body.ts'
 import type { IndexFilter } from '../filters.ts'
 import { NO_FILTER, filterPath, filterQuery } from '../filters.ts'
 import { READING_SIZES, readingSrc, readingSrcSet } from '../images.ts'
+import { mirrorPath } from '../mirror.ts'
 import type { Neighbour, Neighbours, ReaderArticle } from '../store.ts'
 import { absoluteTime } from '../time.ts'
+import { ARCHIVE_PATH } from './archive.tsx'
 import { Head, Masthead } from './chrome.tsx'
+import { SaveAction } from './save.tsx'
 
 /**
  * The article view — where the beauty lives.
@@ -45,6 +48,7 @@ export function ArticlePage({
             appearance={appearance}
             returnTo={articlePath(article, filter)}
             home={filterPath(filter)}
+            elsewhere={{ href: ARCHIVE_PATH, label: 'Archive' }}
           />
 
           <article class="article">
@@ -69,6 +73,15 @@ export function ArticlePage({
               <a class="at-source" href={article.url} rel="noreferrer">
                 Read at {sourceName(article.source)}
               </a>
+
+              {/* At the end, because the end is where the decision is made:
+                  the reader has finished the piece and is deciding whether it
+                  is one to keep. */}
+              <SaveAction
+                article={article}
+                saved={article.savedAt !== null}
+                returnTo={articlePath(article, filter)}
+              />
             </footer>
           </article>
 
@@ -162,7 +175,7 @@ function Onward({
 }
 
 function Body({ article }: { readonly article: ReaderArticle }) {
-  return <div class="body">{raw(presentBody(article.bodyHtml))}</div>
+  return <div class="body">{raw(presentBody(article.bodyHtml, article.mirrors))}</div>
 }
 
 /**
@@ -197,20 +210,31 @@ function StubBody({ article }: { readonly article: ReaderArticle }) {
  *
  * Eager, alone among the images on the page: it is the one the reader is
  * already looking at.
+ *
+ * Once Mirrored it is served from the reader's own storage, at the single width
+ * it was Mirrored at — so there is nothing to offer a dense screen, and nothing
+ * to ask the Source for. That is the whole of what makes a Saved Article
+ * survive its Source's CDN moving on.
  */
 function Hero({ article }: { readonly article: ReaderArticle }) {
   const url = article.heroImageUrl
   if (url === null || bodyOpensWith(article, url)) return null
 
+  const alt = article.heroImageAlt ?? ''
+
   return (
     <figure class="hero">
-      <img
-        src={readingSrc(url)}
-        srcset={readingSrcSet(url)}
-        sizes={READING_SIZES}
-        alt={article.heroImageAlt ?? ''}
-        decoding="async"
-      />
+      {article.heroMirrorKey === null ? (
+        <img
+          src={readingSrc(url)}
+          srcset={readingSrcSet(url)}
+          sizes={READING_SIZES}
+          alt={alt}
+          decoding="async"
+        />
+      ) : (
+        <img src={mirrorPath(article.heroMirrorKey)} alt={alt} decoding="async" />
+      )}
     </figure>
   )
 }

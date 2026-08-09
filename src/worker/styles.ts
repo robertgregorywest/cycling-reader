@@ -135,6 +135,43 @@ body {
   outline-offset: 3px;
 }
 
+/* The masthead's right-hand end: the way to the other collection, and the way
+   the page looks. Two small things kept together so the line has two ends
+   rather than three. */
+.masthead__controls {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--step) * 3);
+}
+
+/* The Archive, reachable from every page. Quiet, because it is a destination
+   and not an action: the reader goes there on purpose or not at all. */
+.masthead__elsewhere {
+  color: var(--ink-quiet);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+
+.masthead__elsewhere:hover { color: var(--ink); }
+
+.masthead__elsewhere:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* Which collection this is. The index does not carry one — it is where the
+   reader lands, and a page does not need to say it is the front page. */
+.collection {
+  margin: calc(var(--step) * 5) 0 calc(var(--step) * 2);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-quiet);
+}
+
 /* The appearance control: one button, cycling. Sized to the tap target a
    thumb needs, drawn as almost nothing. */
 .appearance { margin: 0; line-height: 1; }
@@ -269,7 +306,14 @@ body {
   padding: 0;
 }
 
-.entry { border-bottom: 1px solid var(--rule); }
+/* The row, and the one control that is not the row: opening the Article is
+   the whole line, and keeping it is a star at the end of it. */
+.entry {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  border-bottom: 1px solid var(--rule);
+}
 
 /* Read is dimmed and still there. An Article that vanished on being read
    would take with it the only evidence of what has been covered — and the
@@ -297,6 +341,35 @@ body {
 .entry a:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Saving, from the index: a star at the end of the row. Sized to a thumb and
+   drawn as almost nothing, like every other control here. */
+.save { margin: 0; line-height: 1; }
+
+.save__star {
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  margin-top: calc(var(--step) * 3);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ink-quiet);
+  font: inherit;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.save__star:hover { color: var(--ink); }
+
+/* Saved is the state worth seeing from across the page: it is the one thing
+   about a row that the reader themselves decided. */
+.save__star--on { color: var(--accent); }
+
+.save__star:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius);
 }
 
 .thumb {
@@ -609,10 +682,40 @@ body {
    The link out, and the Stub.
    ------------------------------------------------------------------------- */
 
+/* Two things at the end of an Article: where the rest of it lives, and whether
+   to keep this one. They sit at either end of the same line because they are
+   the two ways of not being finished with it. */
 .article__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--step) * 4);
   margin-top: calc(var(--step) * 10);
   padding-top: calc(var(--step) * 4);
   border-top: 1px solid var(--rule);
+}
+
+/* Named rather than starred, because this is where the decision is made: the
+   reader has finished the piece. */
+.save__action {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ink-quiet);
+  font: inherit;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.save__action:hover { color: var(--ink); }
+
+.save__action--on { color: var(--accent); }
+
+.save__action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
 .at-source, .stub-link {
@@ -705,6 +808,28 @@ a.read-on__side:focus-visible {
 
   /* An absent neighbour leaves no gap once the columns are gone. */
   span.read-on__side { display: none; }
+}
+
+/* Something the reader asked for that could not be done — Saving that could not
+   Mirror. Set in the reading column and in plain prose: it is one sentence
+   about one Article, not an incident. */
+.trouble {
+  max-width: 34rem;
+  margin: calc(var(--step) * 10) 0;
+}
+
+.trouble h2 {
+  margin: 0 0 var(--reading-rhythm);
+  font-family: var(--serif);
+  font-size: 1.4rem;
+}
+
+.trouble p { margin: 0 0 var(--reading-rhythm); color: var(--ink-quiet); }
+
+.trouble a {
+  color: var(--ink);
+  text-decoration-color: var(--accent);
+  text-underline-offset: 0.16em;
 }
 `.trimStart()
 

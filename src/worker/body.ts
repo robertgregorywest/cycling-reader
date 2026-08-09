@@ -1,4 +1,6 @@
 import { READING_SIZES, readingSrcSet } from './images.ts'
+import type { MirrorKeys } from './mirror.ts'
+import { mirrorPath } from './mirror.ts'
 
 /**
  * The stored body, made ready to render.
@@ -21,8 +23,8 @@ import { READING_SIZES, readingSrcSet } from './images.ts'
 const IMAGE = /<img\s+([^>]*?)\/?>/gi
 const SRC = /\bsrc="([^"]*)"/i
 
-export function presentBody(html: string): string {
-  return wrapTables(responsiveImages(html))
+export function presentBody(html: string, mirrors: MirrorKeys = new Map()): string {
+  return wrapTables(responsiveImages(html, mirrors))
 }
 
 /**
@@ -30,13 +32,24 @@ export function presentBody(html: string): string {
  * convention — the same trade the index thumbnail makes, at the size the
  * photography deserves.
  *
+ * Unless it has been Mirrored, in which case the reader's own copy wins and
+ * there is only the one of it: Mirroring stores a single width, so offering
+ * candidates would be offering the same bytes three times over. This is what
+ * makes a Saved Article render with its Source's CDN unavailable.
+ *
  * `loading="lazy"` on every one of them, and not on the hero: a race report
  * carries a dozen images and the reader has seen none of them yet.
  */
-function responsiveImages(html: string): string {
+function responsiveImages(html: string, mirrors: MirrorKeys): string {
   return html.replace(IMAGE, (whole, attributes: string) => {
     const src = SRC.exec(attributes)?.[1]
     if (src === undefined || src === '') return whole
+
+    const key = mirrors.get(src)
+
+    if (key !== undefined) {
+      return `<img ${attributes.replace(SRC, `src="${mirrorPath(key)}"`).trim()} loading="lazy" decoding="async">`
+    }
 
     return `<img ${attributes.trim()} srcset="${readingSrcSet(src)}" sizes="${READING_SIZES}" loading="lazy" decoding="async">`
   })

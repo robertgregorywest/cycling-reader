@@ -3,8 +3,11 @@ import { isAppearance, readAppearance, rememberAppearance } from './appearance.t
 import type { Env } from './env.ts'
 import { parseFilter } from './filters.ts'
 import { FONT_PATH_PREFIX, fontByFile } from './fonts/index.ts'
+import { MIRROR_PATH_PREFIX, contentType, isMirrorKey, mirrorImages } from './mirror.ts'
 import { SIGN_IN_PATH, correctPassphrase, requireSession, startSession } from './session.ts'
 import {
+  archiveEntries,
+  articleImages,
   indexEntries,
   markAllRead,
   markRead,
@@ -12,12 +15,16 @@ import {
   readerArticle,
   readerHealth,
   recordVisit,
+  save,
+  unsave,
 } from './store.ts'
 import { STYLESHEET, STYLESHEET_PATH } from './styles.ts'
+import { ARCHIVE_PATH, ArchivePage } from './views/archive.tsx'
 import { ArticlePage } from './views/article.tsx'
 import { APPEARANCE_PATH } from './views/chrome.tsx'
 import { IndexPage, READ_ALL_PATH } from './views/index.tsx'
 import { document } from './views/page.tsx'
+import { SAVE_PATH_PREFIX, SavingFailedPage } from './views/save.tsx'
 import { SignInPage } from './views/sign-in.tsx'
 
 /**
@@ -29,6 +36,10 @@ import { SignInPage } from './views/sign-in.tsx'
  * arrives here already sanitised, so the Worker emits it verbatim and pays no
  * sanitisation cost at render time — the security invariant sits at exactly
  * one boundary, and that boundary is ingest.
+ *
+ * What it does write is the reader's own state — Read, Last Visit, Saved — and,
+ * at the moment of Saving and only then, the Mirrored images that make an
+ * Archive Article durable (ADR-0005).
  */
 const app = new Hono<{ Bindings: Env }>()
 
@@ -114,6 +125,96 @@ app.post(READ_ALL_PATH, async (c) => {
   await markAllRead(c.env.DB, new Date())
 
   return c.redirect(returnTo(form['return']), 303)
+})
+
+/**
+ * The Archive: everything Saved, and nothing else.
+ *
+ * A destination of its own rather than a filter on the index (ADR-0009). It
+ * records no visit and counts nothing New: arriving in the Archive is something
+ * only the reader can cause, so there is no "since when" for it to report.
+ */
+app.get(ARCHIVE_PATH, async (c) => {
+  const entries = await archiveEntries(c.env.DB)
+
+  return c.html(
+    document(<ArchivePage entries={entries} appearance={readAppearance(c)} now={new Date()} />),
+  )
+})
+
+/**
+ * Saving, and un-Saving: the promotion from Stream to Archive, and the way
+ * back.
+ *
+ * Mirroring happens here, synchronously, before anything is written — an
+ * Article is never recorded Saved until every one of its images is in the
+ * bucket (ADR-0005). Deferring the copy to a scheduled job would leave a window
+ * in which a Saved Article could lose its images to a CDN purge, which is
+ * precisely the failure archiving exists to prevent.
+ *
+ * The form posts the state the reader wants rather than "toggle", so Saving
+ * twice is Saving once: the second pass finds every object already in the
+ * bucket, copies nothing, and rewrites the same keys.
+ */
+app.post(`${SAVE_PATH_PREFIX}:source/:guid`, async (c) => {
+  const form = await c.req.parseBody()
+  const back = returnTo(form['return'])
+
+  const source = c.req.param('source')
+  const guid = c.req.param('guid')
+
+  if (form['saved'] !== 'yes') {
+    await unsave(c.env.DB, { source, guid })
+
+    return c.redirect(back, 303)
+  }
+
+  const images = await articleImages(c.env.DB, source, guid)
+
+  // Expired, or a guid typed wrong. The index is where the reader wants to be,
+  // exactly as it is when the Article itself has gone.
+  if (images === null) return c.notFound()
+
+  const urls = [...(images.heroImageUrl === null ? [] : [images.heroImageUrl])].concat(
+    images.body.map((image) => image.url),
+  )
+
+  try {
+    const keys = await mirrorImages(c.env.MIRROR, urls)
+
+    await save(c.env.DB, { source, guid }, images, keys, new Date())
+  } catch {
+    // Not Saved, and said so. A star that lit while the images stayed at the
+    // Source would be the reader believing they had kept something.
+    return c.html(document(<SavingFailedPage back={back} appearance={readAppearance(c)} />), 502)
+  }
+
+  return c.redirect(back, 303)
+})
+
+/**
+ * A Mirrored image, from the reader's own storage.
+ *
+ * Behind the passphrase like everything else (ADR-0003) — the Archive is the
+ * reading the reader chose to keep, and it is no more public than the Stream.
+ *
+ * Immutable for a year, and honestly so: a key is the digest of the image's
+ * canonical URL, so the bytes under one never change (ADR-0009).
+ */
+app.get(`${MIRROR_PATH_PREFIX}:key`, async (c) => {
+  const key = c.req.param('key')
+
+  // Checked before the bucket is asked: the key comes out of a URL, and a
+  // request must not be able to name an object Mirroring would never write.
+  if (!isMirrorKey(key)) return c.notFound()
+
+  const object = await c.env.MIRROR.get(key)
+  if (object === null) return c.notFound()
+
+  return c.body(object.body, 200, {
+    'content-type': object.httpMetadata?.contentType ?? contentType(key),
+    'cache-control': 'private, max-age=31536000, immutable',
+  })
 })
 
 /**

@@ -1,13 +1,15 @@
 import { env } from 'cloudflare:workers'
 import {
   INSERT_ARTICLE,
+  INSERT_IMAGE,
   INSERT_RUN,
   UPDATE_ARTICLE,
   insertArticleParams,
+  insertImageParams,
   insertRunParams,
   updateArticleParams,
 } from '../../../src/ingest/store/sql.ts'
-import type { Article } from '../../../src/shared/article.ts'
+import type { Article, ArticleImage } from '../../../src/shared/article.ts'
 import type { RunRecord } from '../../../src/shared/run.ts'
 
 /**
@@ -53,6 +55,42 @@ export async function seed(...articles: readonly Article[]): Promise<void> {
       .bind(...insertArticleParams(article))
       .run()
   }
+}
+
+/**
+ * The images within an Article's body, written with the statement an Ingest Run
+ * writes them with — in the order they are read, which is what `position`
+ * means.
+ *
+ * Recorded separately from the body HTML that carries them, exactly as ingest
+ * records them, so that a test Saving this Article Mirrors the same set the
+ * article view then renders from.
+ */
+export async function seedImages(article: Article, ...urls: readonly string[]): Promise<void> {
+  for (const [position, url] of urls.entries()) {
+    const image: ArticleImage = { position, url, alt: null, caption: null }
+
+    await env.DB.prepare(INSERT_IMAGE)
+      .bind(...insertImageParams(article, image))
+      .run()
+  }
+}
+
+/**
+ * An Article whose body carries these images, with the rows recording them —
+ * the pair an Ingest Run always writes together.
+ */
+export async function seedWithImages(
+  article: Article,
+  ...urls: readonly string[]
+): Promise<Article> {
+  const figures = urls.map((url) => `<img src="${url}" alt="A photograph">`).join('')
+  const withBody = { ...article, bodyHtml: `${article.bodyHtml}${figures}` }
+
+  await seed(withBody)
+  await seedImages(withBody, ...urls)
+
+  return withBody
 }
 
 /**

@@ -60,7 +60,11 @@ results tables that scroll in their own box on a phone. Opening an Article marks
 it Read, on every device. Light and dark follow the device, with an override
 that persists.
 
-Filtering, prev/next, Saving, the Archive and Expiry are not built.
+Saving an Article copies its images into R2 in the same breath, so that the
+Archive stays readable after the Source's CDN has moved on; the Archive is a
+destination of its own, linked from every masthead.
+
+Expiry is not built.
 
 ## Working on it
 

@@ -78,13 +78,17 @@ npx wrangler r2 bucket create cycling-reader-images
 > 10 GB of storage, no egress fees — costs nothing to use at this scale. This is
 > the one place the £0 claim meets a card form.
 >
-> **This step is skippable for now.** R2 is used only by ticket
+> **This step was skippable until ticket
 > [#12](https://github.com/robertgregorywest/cycling-reader/issues/12) (Saving,
-> Mirroring and the Archive). Tickets #5 through #11 never touch it, so skipping
-> this yields a complete, working reader without the durable Archive. If you
-> would rather not put a card on file at all, the alternative is to mirror
-> images into D1 as blobs — less clean, but comfortably inside the 5 GB tier for
-> a personal Archive, and it keeps the system card-free.
+> Mirroring and the Archive), which is now built.** Tickets #5 through #11 never
+> touch R2, so a reader deployed without the bucket still works — but Saving
+> will fail against a missing binding, and the Archive is the point of Saving.
+> If you would rather not put a card on file at all, the alternative is to
+> mirror images into D1 as blobs — less clean, but comfortably inside the 5 GB
+> tier for a personal Archive, and it keeps the system card-free.
+
+The bucket's name is in `wrangler.jsonc` as the `MIRROR` binding, so it must be
+called exactly this.
 
 ### 6. Create an API token
 
@@ -234,4 +238,4 @@ to a third party, and nothing to sign up for.
 | #2–#4 | Node 22.13, pnpm |
 | #5 | Cloudflare account, wrangler login, D1 database, API token, three GitHub Secrets, the same three in `.dev.vars`, `pnpm migrate`, Actions write permission |
 | #7 | A passphrase, two Worker secrets, a `workers.dev` subdomain |
-| #12 | An R2 bucket — the only step that may want a payment method |
+| #12 | An R2 bucket — the only step that may want a payment method — and `pnpm migrate` again, for the migration Mirroring added |

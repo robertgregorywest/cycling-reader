@@ -6,11 +6,11 @@ import { SOURCE_IDS, sourceName } from '../../shared/source.ts'
 import type { Appearance } from '../appearance.ts'
 import type { IndexFilter } from '../filters.ts'
 import { filterPath, isFiltered } from '../filters.ts'
-import { candidates } from '../images.ts'
 import type { IndexEntry, ReaderHealth } from '../store.ts'
-import { isStale, relativePhrase, relativeTime } from '../time.ts'
-import { articlePath } from './article.tsx'
+import { isStale, relativePhrase } from '../time.ts'
+import { ARCHIVE_PATH } from './archive.tsx'
 import { Head, Masthead } from './chrome.tsx'
+import { Entry } from './entries.tsx'
 
 /**
  * The index — the page that answers "is there anything to read?".
@@ -20,10 +20,6 @@ import { Head, Masthead } from './chrome.tsx'
  * photography the Article deserves. A screen of hero images per item is
  * exactly the experience the reader exists to replace.
  */
-
-/** The thumbnail's display size in CSS pixels; the CDN is asked for this and
- * for twice it. */
-const THUMBNAIL_WIDTH = 72
 
 /** Where marking everything Read posts. A form and a redirect, like every
  * other control here: nothing in the reader runs JavaScript (ADR-0008). */
@@ -53,7 +49,11 @@ export function IndexPage({
       <Head title="Cycling Reader" />
       <body>
         <div class="shell">
-          <Masthead appearance={appearance} returnTo={here} />
+          <Masthead
+            appearance={appearance}
+            returnTo={here}
+            elsewhere={{ href: ARCHIVE_PATH, label: 'Archive' }}
+          />
 
           <Visit newCount={newCount} returnTo={here} />
           <Filters filter={filter} />
@@ -66,7 +66,7 @@ export function IndexPage({
           ) : (
             <ol class="index">
               {entries.map((entry) => (
-                <Entry entry={entry} filter={filter} now={now} />
+                <Entry entry={entry} filter={filter} now={now} returnTo={here} />
               ))}
             </ol>
           )}
@@ -228,83 +228,3 @@ function Split({ methods }: { readonly methods: Readonly<Record<ExtractionMethod
 /** Best first, so a rising fallback count reads as something arriving from the
  * right. */
 const ORDER: readonly ExtractionMethod[] = ['targeted', 'readability', 'stub']
-
-function Entry({
-  entry,
-  filter,
-  now,
-}: {
-  readonly entry: IndexEntry
-  /** Handed on to the Article, so that reading onwards from it stays inside
-   * the lens the reader chose here. */
-  readonly filter: IndexFilter
-  readonly now: Date
-}) {
-  return (
-    <li class={entryClass(entry)}>
-      {/* An Article opens in the reader; a Stub goes straight to its Source,
-          because following that link is the whole of how a Stub is read and
-          an intermediate page would be a click that says nothing. */}
-      <a href={entry.isStub ? entry.url : articlePath(entry, filter)}>
-        <Thumbnail entry={entry} />
-        <span>
-          <span class="headline">{entry.headline}</span>
-          {entry.teaser === '' ? null : <span class="teaser">{entry.teaser}</span>}
-          <span class="meta">
-            <span class="source">{sourceName(entry.source)}</span>
-            <time datetime={entry.publishedAt}>{relativeTime(entry.publishedAt, now)}</time>
-            {/* The Updated Marker: this was Revised after it was Read, which
-                on a race report usually means it has gained its results. */}
-            {entry.isUpdated ? <span class="updated">Updated</span> : null}
-            {entry.isStub ? <span class="stub">At the Source</span> : null}
-          </span>
-        </span>
-      </a>
-    </li>
-  )
-}
-
-/**
- * How an entry states itself: Read, and Revised since.
- *
- * An Updated Marker only ever appears on something Read, and Read is dimmed —
- * so an entry carrying one is dimmed less than the rest. The point of the
- * marker is to bring the eye back to an Article the reader has already
- * dismissed once, and it cannot do that from behind the dimming.
- */
-function entryClass(entry: IndexEntry): string {
-  const classes = ['entry']
-
-  if (entry.isRead) classes.push('entry--read')
-  if (entry.isUpdated) classes.push('entry--updated')
-
-  return classes.join(' ')
-}
-
-/**
- * The Feed's hero image at thumbnail size, or the space where one would be.
- *
- * The space is kept deliberately: an Article without a hero image would
- * otherwise pull its headline left and break the column the eye is scanning
- * down.
- */
-function Thumbnail({ entry }: { readonly entry: IndexEntry }) {
-  if (entry.heroImageUrl === null) return <span class="thumb thumb--absent" aria-hidden="true" />
-
-  const { src, srcSet } = candidates(entry.heroImageUrl, THUMBNAIL_WIDTH)
-
-  return (
-    <img
-      class="thumb"
-      src={src}
-      srcset={srcSet}
-      width={THUMBNAIL_WIDTH}
-      height={THUMBNAIL_WIDTH}
-      // Empty rather than the Feed's alt text: the thumbnail sits inside a link
-      // the headline already names, so announcing it twice is noise.
-      alt=""
-      loading="lazy"
-      decoding="async"
-    />
-  )
-}

@@ -155,6 +155,7 @@ export interface ArticleRow {
   text_length: number
   hero_image_url: string | null
   hero_image_alt: string | null
+  hero_mirror_key: string | null
   read_at: string | null
   saved_at: string | null
   first_seen_at: string
@@ -213,6 +214,7 @@ export function toStoredArticle(row: ArticleRow): StoredArticle {
     textLength: row.text_length,
     heroImageUrl: row.hero_image_url,
     heroImageAlt: row.hero_image_alt,
+    heroMirrorKey: row.hero_mirror_key,
     readAt: row.read_at,
     savedAt: row.saved_at,
     firstSeenAt: row.first_seen_at,

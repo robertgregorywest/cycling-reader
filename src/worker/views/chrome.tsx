@@ -39,6 +39,7 @@ export function Masthead({
   appearance,
   returnTo,
   home,
+  elsewhere,
 }: {
   readonly appearance: Appearance
   /** The path this page is at, so that changing the appearance returns to it. */
@@ -52,6 +53,17 @@ export function Masthead({
    * reset to everything would make them choose their Section twice.
    */
   readonly home?: string
+  /**
+   * The other collection, named and linked: the Archive from the Stream, the
+   * Stream from the Archive.
+   *
+   * The Archive is a destination rather than a chip on the index, because it is
+   * a different thing from the Stream and burying the durable part of the
+   * collection inside the disposable part makes it the hardest thing to reach
+   * (ADR-0009). A destination needs somewhere to be reached from, and there is
+   * exactly one piece of furniture on every page.
+   */
+  readonly elsewhere?: { readonly href: string; readonly label: string }
 }) {
   return (
     <header class="masthead">
@@ -62,7 +74,14 @@ export function Masthead({
       ) : (
         <h1>Cycling Reader</h1>
       )}
-      <AppearanceControl appearance={appearance} returnTo={returnTo} />
+      <div class="masthead__controls">
+        {elsewhere === undefined ? null : (
+          <a class="masthead__elsewhere" href={elsewhere.href}>
+            {elsewhere.label}
+          </a>
+        )}
+        <AppearanceControl appearance={appearance} returnTo={returnTo} />
+      </div>
     </header>
   )
 }

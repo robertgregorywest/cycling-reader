@@ -2,8 +2,10 @@ import { env } from 'cloudflare:workers'
 import {
   INSERT_ARTICLE,
   INSERT_RUN,
+  UPDATE_ARTICLE,
   insertArticleParams,
   insertRunParams,
+  updateArticleParams,
 } from '../../../src/ingest/store/sql.ts'
 import type { Article } from '../../../src/shared/article.ts'
 import type { RunRecord } from '../../../src/shared/run.ts'
@@ -51,6 +53,17 @@ export async function seed(...articles: readonly Article[]): Promise<void> {
       .bind(...insertArticleParams(article))
       .run()
   }
+}
+
+/**
+ * An Article Revised at its Source, re-Extracted as an Ingest Run re-Extracts
+ * it: with the statement that names the Source's columns and leaves the
+ * reader's own — `read_at`, and `first_seen_at` — where they were.
+ */
+export async function revise(article: Article): Promise<void> {
+  await env.DB.prepare(UPDATE_ARTICLE)
+    .bind(...updateArticleParams(article))
+    .run()
 }
 
 /** An instant the given number of hours before now, for asserting on relative

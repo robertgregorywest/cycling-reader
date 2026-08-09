@@ -19,6 +19,8 @@ describe('a reader who has not signed in', () => {
     ['the index', '/'],
     ['the stylesheet', STYLESHEET_PATH],
     ['an Article', '/article/cyclingnews/Djx8QZAfLkekqGKNHgJzwj'],
+    ['the index under a filter', '/?section=racing&source=cyclingnews'],
+    ['marking everything Read', '/read-all'],
     ['the reading typeface', fontPath(FONTS[0] as Font)],
     ['a route that does not exist', '/nothing-here'],
     ['a path that looks like a static asset', '/fonts/source-serif.woff2'],

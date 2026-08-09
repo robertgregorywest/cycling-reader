@@ -1,13 +1,21 @@
 import { Hono } from 'hono'
 import { isAppearance, readAppearance, rememberAppearance } from './appearance.ts'
 import type { Env } from './env.ts'
+import { parseFilter } from './filters.ts'
 import { FONT_PATH_PREFIX, fontByFile } from './fonts/index.ts'
 import { SIGN_IN_PATH, correctPassphrase, requireSession, startSession } from './session.ts'
-import { indexEntries, markRead, readerArticle, readerHealth } from './store.ts'
+import {
+  indexEntries,
+  markAllRead,
+  markRead,
+  readerArticle,
+  readerHealth,
+  recordVisit,
+} from './store.ts'
 import { STYLESHEET, STYLESHEET_PATH } from './styles.ts'
 import { ArticlePage } from './views/article.tsx'
 import { APPEARANCE_PATH } from './views/chrome.tsx'
-import { IndexPage } from './views/index.tsx'
+import { IndexPage, READ_ALL_PATH } from './views/index.tsx'
 import { document } from './views/page.tsx'
 import { SignInPage } from './views/sign-in.tsx'
 
@@ -57,19 +65,54 @@ app.post(SIGN_IN_PATH, async (c) => {
   return c.redirect('/', 303)
 })
 
+/**
+ * The index, through whatever filter the query string asks for.
+ *
+ * Opening it is the visit: `recordVisit` counts what is New against the Last
+ * Visit and then advances it, so the count describes this arrival rather than
+ * accumulating across them. That is a write on a GET, and deliberate for the
+ * same reason opening an Article is — the Last Visit is exactly the moment the
+ * index is looked at, and there is nothing else it could be.
+ *
+ * The visit is recorded whatever the filter. A filter is a lens on the index,
+ * not a different page, and a rule where some views of the index counted as
+ * visits and others did not would be a rule the reader had to learn.
+ */
 app.get('/', async (c) => {
-  const [entries, health] = await Promise.all([indexEntries(c.env.DB), readerHealth(c.env.DB)])
+  const filter = parseFilter(new URL(c.req.url).searchParams)
+
+  const [entries, health, newCount] = await Promise.all([
+    indexEntries(c.env.DB, filter),
+    readerHealth(c.env.DB, filter),
+    recordVisit(c.env.DB, new Date()),
+  ])
 
   return c.html(
     document(
       <IndexPage
         entries={entries}
         health={health}
+        filter={filter}
+        newCount={newCount}
         appearance={readAppearance(c)}
         now={new Date()}
       />,
     ),
   )
+})
+
+/**
+ * Everything Read, in one action — what returning after a week away is worth.
+ *
+ * A POST and a redirect, so that the reader lands back on the index they
+ * pressed it from, filter and all, and a reload does not re-submit it.
+ */
+app.post(READ_ALL_PATH, async (c) => {
+  const form = await c.req.parseBody()
+
+  await markAllRead(c.env.DB, new Date())
+
+  return c.redirect(returnTo(form['return']), 303)
 })
 
 /**

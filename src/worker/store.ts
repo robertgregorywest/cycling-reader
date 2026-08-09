@@ -1,6 +1,8 @@
 import type { SourceId } from '../shared/article.ts'
 import type { ExtractionMethod } from '../shared/extraction.ts'
 import type { Section } from '../shared/section.ts'
+import type { IndexFilter } from './filters.ts'
+import { NO_FILTER } from './filters.ts'
 
 /**
  * What the reader reads. The Worker never writes an Article and never extracts
@@ -38,6 +40,12 @@ export interface IndexEntry {
    * legible without the index rearranging itself around it.
    */
   readonly isRead: boolean
+  /**
+   * The Updated Marker: a Revision that post-dates the moment this Article was
+   * Read — a race report that has gained its results since it was looked at.
+   * Always false for an Article never Read, where there is no "since".
+   */
+  readonly isUpdated: boolean
 }
 
 /**
@@ -48,12 +56,38 @@ export interface IndexEntry {
  */
 export const INDEX_LIMIT = 100
 
-const SELECT_INDEX = `SELECT
-  source, guid, url, headline, teaser, section, published_at,
+const selectIndex = (filter: IndexFilter): string => `SELECT
+  source, guid, url, headline, teaser, section, published_at, updated_at,
   hero_image_url, extraction_method, read_at
-FROM articles
+FROM articles${where(filter)}
 ORDER BY published_at DESC
 LIMIT ?`
+
+/**
+ * The filter, as SQL. Section and Source in this order here and in `binds`
+ * below, because the two are read together and a placeholder counted in one
+ * order and filled in the other is a bug that still returns rows.
+ *
+ * The fragments are fixed text and the values are always bound, so a query
+ * parameter never reaches the database as SQL.
+ */
+function where(filter: IndexFilter): string {
+  const conditions: string[] = []
+
+  if (filter.section !== null) conditions.push('section = ?')
+  if (filter.source !== null) conditions.push('source = ?')
+
+  return conditions.length === 0 ? '' : `\nWHERE ${conditions.join(' AND ')}`
+}
+
+function binds(filter: IndexFilter): readonly string[] {
+  const values: string[] = []
+
+  if (filter.section !== null) values.push(filter.section)
+  if (filter.source !== null) values.push(filter.source)
+
+  return values
+}
 
 interface IndexRow {
   source: string
@@ -63,13 +97,15 @@ interface IndexRow {
   teaser: string
   section: string
   published_at: string
+  updated_at: string
   hero_image_url: string | null
   extraction_method: string
   read_at: string | null
 }
 
 /**
- * The index, newest first.
+ * The index, newest first, through whatever filter the reader is reading it
+ * under.
  *
  * By publication and not by first seen: a Revision is not news, and an Article
  * corrected this morning must not climb back over what has been published
@@ -77,9 +113,13 @@ interface IndexRow {
  */
 export async function indexEntries(
   database: D1Database,
+  filter: IndexFilter = NO_FILTER,
   limit: number = INDEX_LIMIT,
 ): Promise<readonly IndexEntry[]> {
-  const { results } = await database.prepare(SELECT_INDEX).bind(limit).all<IndexRow>()
+  const { results } = await database
+    .prepare(selectIndex(filter))
+    .bind(...binds(filter), limit)
+    .all<IndexRow>()
 
   return results.map(toIndexEntry)
 }
@@ -169,6 +209,70 @@ export async function markRead(
   await database.prepare(MARK_READ).bind(now.toISOString(), article.source, article.guid).run()
 }
 
+/**
+ * How many Articles arrived since the Last Visit.
+ *
+ * New is counted against arrival — `first_seen_at`, which re-Extraction never
+ * touches — and not against publication, so a Revision does not make an
+ * Article New again any more than it returns it to the top of the index.
+ *
+ * The count is over the whole reader and not through the current filter: New
+ * is a fact about the reader's Last Visit, not about the lens they happen to
+ * be looking through, and a count that changed when a chip was pressed would
+ * be a count of something else.
+ *
+ * `COALESCE` to the empty string covers the reader that has never visited,
+ * where everything is New: every ISO instant sorts after `''`.
+ */
+const COUNT_NEW = `SELECT COUNT(*) AS articles
+FROM articles
+WHERE first_seen_at > COALESCE((SELECT last_visit_at FROM app_state WHERE id = 1), '')`
+
+const ADVANCE_LAST_VISIT = 'UPDATE app_state SET last_visit_at = ? WHERE id = 1'
+
+/**
+ * Opening the index is the visit: the New count is taken against the Last
+ * Visit, and the Last Visit then becomes now.
+ *
+ * Counted and advanced in one batch, which D1 runs as one transaction, so the
+ * count and the moment it was taken against cannot come apart — two round
+ * trips could count Articles that the advance then declares already seen.
+ *
+ * This is the only number the reader is ever shown. There is deliberately no
+ * cumulative unread total anywhere: at roughly a hundred Articles a day
+ * against a realistic reading rate such a number only ever climbs, and a
+ * reading application should not become a source of obligation.
+ */
+export async function recordVisit(database: D1Database, now: Date): Promise<number> {
+  const [counted] = await database.batch<{ articles: number }>([
+    database.prepare(COUNT_NEW),
+    database.prepare(ADVANCE_LAST_VISIT).bind(now.toISOString()),
+  ])
+
+  return counted?.results[0]?.articles ?? 0
+}
+
+const MARK_ALL_READ = 'UPDATE articles SET read_at = ? WHERE read_at IS NULL'
+
+/**
+ * Everything Read, in one action — what a week away is worth on returning.
+ *
+ * Deliberately every Article and not the filtered ones: this is the thing that
+ * clears the New count, and a New count is not something a Section can hold a
+ * share of. The Last Visit advances with it for the same reason.
+ *
+ * `read_at IS NULL` keeps the first reading the one that counts, exactly as
+ * opening a single Article does.
+ */
+export async function markAllRead(database: D1Database, now: Date): Promise<void> {
+  const at = now.toISOString()
+
+  await database.batch([
+    database.prepare(MARK_ALL_READ).bind(at),
+    database.prepare(ADVANCE_LAST_VISIT).bind(at),
+  ])
+}
+
 function toReaderArticle(row: ArticleRow): ReaderArticle {
   return {
     source: row.source as SourceId,
@@ -226,21 +330,24 @@ ORDER BY started_at DESC
 LIMIT 1`
 
 /**
- * The split over the same window the index lists, so that the footer describes
- * the page it sits at the bottom of rather than the whole thirty-day Stream.
+ * The split over the same window the index lists — the same filter and the
+ * same limit — so that the footer describes the page it sits at the bottom of
+ * rather than the whole thirty-day Stream.
  */
-const SELECT_EXTRACTION_SPLIT = `SELECT extraction_method, COUNT(*) AS articles
-FROM (SELECT extraction_method FROM articles ORDER BY published_at DESC LIMIT ?)
+const selectExtractionSplit = (filter: IndexFilter): string => `SELECT
+  extraction_method, COUNT(*) AS articles
+FROM (SELECT extraction_method FROM articles${where(filter)} ORDER BY published_at DESC LIMIT ?)
 GROUP BY extraction_method`
 
 /** How the footer reads its two facts: one round trip, not two. */
 export async function readerHealth(
   database: D1Database,
+  filter: IndexFilter = NO_FILTER,
   limit: number = INDEX_LIMIT,
 ): Promise<ReaderHealth> {
   const [succeeded, split] = await database.batch<Record<string, unknown>>([
     database.prepare(SELECT_LAST_SUCCEEDED),
-    database.prepare(SELECT_EXTRACTION_SPLIT).bind(limit),
+    database.prepare(selectExtractionSplit(filter)).bind(...binds(filter), limit),
   ])
 
   const extractionMethods = { targeted: 0, readability: 0, stub: 0 }
@@ -268,5 +375,19 @@ function toIndexEntry(row: IndexRow): IndexEntry {
     heroImageUrl: row.hero_image_url,
     isStub: row.extraction_method === 'stub',
     isRead: row.read_at !== null,
+    isUpdated: revisedSinceRead(row.updated_at, row.read_at),
   }
+}
+
+/**
+ * Whether a Revision post-dates the Read. Never for an Article never Read: an
+ * Updated Marker on something never opened would be telling the reader that
+ * something changed since a moment that never happened.
+ */
+function revisedSinceRead(updatedAt: string, readAt: string | null): boolean {
+  if (readAt === null) return false
+
+  // NaN from either side compares false, which is the right answer: an
+  // unreadable timestamp is not evidence of a Revision.
+  return new Date(updatedAt).getTime() > new Date(readAt).getTime()
 }

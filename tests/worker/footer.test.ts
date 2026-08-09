@@ -17,8 +17,8 @@ beforeEach(async () => {
   cookie = await signIn()
 })
 
-async function footer(): Promise<string> {
-  const response = await readerAs(cookie, '/')
+async function footer(path = '/'): Promise<string> {
+  const response = await readerAs(cookie, path)
 
   expect(response.status).toBe(200)
 
@@ -103,5 +103,18 @@ describe('the Extraction method split', () => {
 
   it('is absent rather than zeroed when there are no Articles at all', async () => {
     expect(await footer()).not.toContain('class="split"')
+  })
+
+  it('describes the page it sits at the bottom of, filter and all', async () => {
+    await seed(
+      anArticle({ guid: 'one', section: 'racing', extractionMethod: 'targeted' }),
+      anArticle({ guid: 'two', section: 'tech', extractionMethod: 'readability' }),
+    )
+    await seedRuns(aRun({ finishedAt: hoursAgo(1) }))
+
+    const body = await footer('/?section=racing')
+
+    expect(body).toContain('1 targeted')
+    expect(body).not.toContain('readability')
   })
 })

@@ -15,3 +15,12 @@ export const SOURCE_NAMES: Readonly<Record<SourceId, string>> = {
 export function sourceName(id: SourceId): string {
   return SOURCE_NAMES[id]
 }
+
+/** Every Source, in the order the index offers them as a filter. Derived from
+ * the names rather than listed again, so a third Source is added once. */
+export const SOURCE_IDS = Object.keys(SOURCE_NAMES) as readonly SourceId[]
+
+/** Whether a string off a query parameter names a Source. */
+export function isSourceId(value: unknown): value is SourceId {
+  return typeof value === 'string' && (SOURCE_IDS as readonly string[]).includes(value)
+}

@@ -173,6 +173,96 @@ body {
   border: 0;
 }
 
+/* What this visit is: how much arrived since the last one, and the one action
+   that clears it. Set at the scale of an entry's metadata, because it is
+   information about the list rather than a heading over it. */
+.visit {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: calc(var(--step) * 2);
+  margin-top: calc(var(--step) * 3);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.visit .new { margin: 0; color: var(--ink-quiet); }
+
+/* The count of New is the only number the reader is ever shown, so it is the
+   only one that may be dark. Nothing new is grey, and says so in words: a
+   zero is a thing to read twice. */
+.visit .new--some { color: var(--ink); font-weight: 600; }
+
+.mark-all { margin: 0; line-height: 1; }
+
+.mark-all button {
+  min-height: 2rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ink-quiet);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 0.25em;
+  cursor: pointer;
+}
+
+.mark-all button:hover { color: var(--ink); }
+
+.mark-all button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
+/* The filters: Section, then Source. Two facets that combine, kept small
+   enough that the first headline still arrives near the top of a phone. */
+.filters {
+  margin-top: calc(var(--step) * 3);
+  padding-bottom: calc(var(--step) * 3);
+  border-bottom: 1px solid var(--rule);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--step);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chips + .chips { margin-top: var(--step); }
+
+.chip {
+  display: block;
+  padding: calc(var(--step) * 1.4) calc(var(--step) * 2.4);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  color: var(--ink-quiet);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.chip:hover { color: var(--ink); border-color: var(--ink-quiet); }
+
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The filter in force, stated rather than implied: a reader who cannot see
+   which lens they are looking through will read the absence of an Article as
+   the absence of the news. */
+.chip--on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--page);
+  font-weight: 600;
+}
+
 .index {
   list-style: none;
   margin: 0;
@@ -186,6 +276,11 @@ body {
    dimming is opacity rather than a grey, so the thumbnail recedes with the
    words. */
 .entry--read { opacity: 0.55; }
+
+/* An Article Revised since it was Read comes part of the way back: the marker
+   exists to return the eye to something already dismissed, and it cannot do
+   that from behind the full dimming. */
+.entry--updated { opacity: 0.82; }
 
 /* The whole row is the target: on a phone the thumbnail and the headline
    should not be two different things to hit. */
@@ -253,6 +348,10 @@ body {
 /* A Stub is a legitimate Article, so it is listed like any other — the marker
    says only that reading it means leaving. */
 .meta .stub::before { content: "\\2197\\00a0"; }
+
+/* The Updated Marker: on a race report this usually means the results have
+   arrived, which is worth the one accent on the line. */
+.meta .updated { color: var(--accent); font-weight: 600; }
 
 .empty {
   margin: calc(var(--step) * 12) 0;

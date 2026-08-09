@@ -33,6 +33,11 @@ export interface IndexEntry {
    * listed like any other — it is only where the link goes that differs.
    */
   readonly isStub: boolean
+  /**
+   * Read is shown dimmed rather than removed: what has been covered should be
+   * legible without the index rearranging itself around it.
+   */
+  readonly isRead: boolean
 }
 
 /**
@@ -45,7 +50,7 @@ export const INDEX_LIMIT = 100
 
 const SELECT_INDEX = `SELECT
   source, guid, url, headline, teaser, section, published_at,
-  hero_image_url, extraction_method
+  hero_image_url, extraction_method, read_at
 FROM articles
 ORDER BY published_at DESC
 LIMIT ?`
@@ -60,6 +65,7 @@ interface IndexRow {
   published_at: string
   hero_image_url: string | null
   extraction_method: string
+  read_at: string | null
 }
 
 /**
@@ -76,6 +82,111 @@ export async function indexEntries(
   const { results } = await database.prepare(SELECT_INDEX).bind(limit).all<IndexRow>()
 
   return results.map(toIndexEntry)
+}
+
+/**
+ * One Article, as the article view renders it.
+ *
+ * This one does carry the body, which is the whole point of it, and so is read
+ * a single row at a time and never in a list.
+ */
+export interface ReaderArticle {
+  readonly source: SourceId
+  readonly guid: string
+  /** The Article at its Source: the link out, and the whole of how a Stub is
+   * read. */
+  readonly url: string
+  readonly headline: string
+  readonly teaser: string
+  readonly author: string | null
+  readonly section: Section
+  readonly publishedAt: string
+  readonly updatedAt: string
+  /** Clean body HTML, already sanitised at ingest and emitted verbatim.
+   * Empty when the Article is a Stub. */
+  readonly bodyHtml: string
+  readonly extractionMethod: ExtractionMethod
+  readonly heroImageUrl: string | null
+  readonly heroImageAlt: string | null
+  readonly isStub: boolean
+  /** When this Article was first opened, or null if it never has been. */
+  readonly readAt: string | null
+}
+
+const SELECT_ARTICLE = `SELECT
+  source, guid, url, headline, teaser, author, section,
+  published_at, updated_at, body_html, extraction_method,
+  hero_image_url, hero_image_alt, read_at
+FROM articles
+WHERE source = ? AND guid = ?`
+
+interface ArticleRow {
+  source: string
+  guid: string
+  url: string
+  headline: string
+  teaser: string
+  author: string | null
+  section: string
+  published_at: string
+  updated_at: string
+  body_html: string
+  extraction_method: string
+  hero_image_url: string | null
+  hero_image_alt: string | null
+  read_at: string | null
+}
+
+/** The Article at this Source and guid, or null — a guid typed wrong, or an
+ * Article that has since Expired. */
+export async function readerArticle(
+  database: D1Database,
+  source: string,
+  guid: string,
+): Promise<ReaderArticle | null> {
+  const row = await database.prepare(SELECT_ARTICLE).bind(source, guid).first<ArticleRow>()
+
+  return row === null ? null : toReaderArticle(row)
+}
+
+/**
+ * Opening an Article marks it Read, and the first opening is the one that
+ * counts: `read_at` records when the reader first got to it, so a second
+ * reading on a second device must not move it.
+ *
+ * This is the Worker's one write, and it is not to an Article's content —
+ * ingest owns all of that (ADR-0001). Read state is the reader's.
+ */
+const MARK_READ = 'UPDATE articles SET read_at = ? WHERE source = ? AND guid = ? AND read_at IS NULL'
+
+export async function markRead(
+  database: D1Database,
+  article: ReaderArticle,
+  now: Date,
+): Promise<void> {
+  if (article.readAt !== null) return
+
+  await database.prepare(MARK_READ).bind(now.toISOString(), article.source, article.guid).run()
+}
+
+function toReaderArticle(row: ArticleRow): ReaderArticle {
+  return {
+    source: row.source as SourceId,
+    guid: row.guid,
+    url: row.url,
+    headline: row.headline,
+    teaser: row.teaser,
+    author: row.author,
+    section: row.section as Section,
+    publishedAt: row.published_at,
+    updatedAt: row.updated_at,
+    bodyHtml: row.body_html,
+    extractionMethod: row.extraction_method as ExtractionMethod,
+    heroImageUrl: row.hero_image_url,
+    heroImageAlt: row.hero_image_alt,
+    isStub: row.extraction_method === 'stub',
+    readAt: row.read_at,
+  }
 }
 
 /**
@@ -156,5 +267,6 @@ function toIndexEntry(row: IndexRow): IndexEntry {
     publishedAt: row.published_at,
     heroImageUrl: row.hero_image_url,
     isStub: row.extraction_method === 'stub',
+    isRead: row.read_at !== null,
   }
 }

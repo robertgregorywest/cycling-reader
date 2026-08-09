@@ -1,9 +1,11 @@
 import type { ExtractionMethod } from '../../shared/extraction.ts'
 import { sourceName } from '../../shared/source.ts'
+import type { Appearance } from '../appearance.ts'
 import { candidates } from '../images.ts'
 import type { IndexEntry, ReaderHealth } from '../store.ts'
-import { STYLESHEET_PATH } from '../styles.ts'
 import { isStale, relativePhrase, relativeTime } from '../time.ts'
+import { articlePath } from './article.tsx'
+import { Head, Masthead } from './chrome.tsx'
 
 /**
  * The index — the page that answers "is there anything to read?".
@@ -21,26 +23,20 @@ const THUMBNAIL_WIDTH = 72
 export function IndexPage({
   entries,
   health,
+  appearance,
   now,
 }: {
   readonly entries: readonly IndexEntry[]
   readonly health: ReaderHealth
+  readonly appearance: Appearance
   readonly now: Date
 }) {
   return (
-    <html lang="en">
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="robots" content="noindex, nofollow" />
-        <title>Cycling Reader</title>
-        <link rel="stylesheet" href={STYLESHEET_PATH} />
-      </head>
+    <html lang="en" data-theme={appearance}>
+      <Head title="Cycling Reader" />
       <body>
         <div class="shell">
-          <header class="masthead">
-            <h1>Cycling Reader</h1>
-          </header>
+          <Masthead appearance={appearance} returnTo="/" />
 
           {entries.length === 0 ? (
             <p class="empty">Nothing yet.</p>
@@ -113,11 +109,11 @@ const ORDER: readonly ExtractionMethod[] = ['targeted', 'readability', 'stub']
 
 function Entry({ entry, now }: { readonly entry: IndexEntry; readonly now: Date }) {
   return (
-    <li class="entry">
-      {/* Every Article links out for now. The article view arrives with the
-          next ticket and takes this link; a Stub keeps it, because a Stub is
-          read by following the link to its Source. */}
-      <a href={entry.url}>
+    <li class={entry.isRead ? 'entry entry--read' : 'entry'}>
+      {/* An Article opens in the reader; a Stub goes straight to its Source,
+          because following that link is the whole of how a Stub is read and
+          an intermediate page would be a click that says nothing. */}
+      <a href={entry.isStub ? entry.url : articlePath(entry)}>
         <Thumbnail entry={entry} />
         <span>
           <span class="headline">{entry.headline}</span>

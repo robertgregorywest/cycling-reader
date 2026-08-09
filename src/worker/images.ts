@@ -61,3 +61,35 @@ export function candidates(url: string, width: number): { src: string; srcSet: s
     srcSet: `${atWidth(url, width)} 1x, ${atWidth(url, width * 2)} 2x`,
   }
 }
+
+/**
+ * The widths an image in the article view is offered at.
+ *
+ * The reading column is 34rem — around 640 CSS pixels at a browser's default —
+ * so 640 covers a laptop, 1280 covers it at twice the pixel density, and 420
+ * is the phone, which is the connection that matters.
+ */
+const READING_WIDTHS: readonly number[] = [420, 640, 1280]
+
+/**
+ * What the browser is told the image will occupy, so that it can choose a
+ * candidate before the stylesheet has arrived. The column is capped at the
+ * measure, and is the width of the viewport below that, less the shell's
+ * padding.
+ */
+export const READING_SIZES = '(min-width: 40rem) 34rem, calc(100vw - 2rem)'
+
+/**
+ * A full set of width candidates for photography shown at reading size, where
+ * unlike the index thumbnail the display width is not one number: it is the
+ * viewport until it is the measure.
+ */
+export function readingSrcSet(url: string): string {
+  return READING_WIDTHS.map((width) => `${atWidth(url, width)} ${width}w`).join(', ')
+}
+
+/** The candidate a browser without `srcset` support gets, and the one the
+ * chooser starts from: the reading column at one device pixel per CSS pixel. */
+export function readingSrc(url: string): string {
+  return atWidth(url, READING_WIDTHS[1] as number)
+}

@@ -33,6 +33,41 @@ export function relativeTime(instant: string, now: Date): string {
 }
 
 /**
+ * The reader's own time zone. Storage is UTC throughout and the reader is one
+ * person in one place, so the conversion is a constant rather than a setting:
+ * a preference with one possible value is a preference nobody wants.
+ */
+const READING_ZONE = 'Europe/London'
+
+const ABSOLUTE = new Intl.DateTimeFormat('en-GB', {
+  timeZone: READING_ZONE,
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+})
+
+/**
+ * When an Article was published, in words and in local time.
+ *
+ * Absolute here and relative in the index, because the questions differ: the
+ * index is scanned for recency, and an Article being read is placed — a race
+ * report is about a specific afternoon, and "6h" does not say which one.
+ *
+ * The year is omitted, and deliberately: the Stream is thirty days deep, so
+ * every year printed would be this one.
+ */
+export function absoluteTime(instant: string): string {
+  const at = new Date(instant)
+
+  if (Number.isNaN(at.getTime())) return ''
+
+  return ABSOLUTE.format(at).replace(' at ', ', ')
+}
+
+/**
  * How long ago, in words, for the footer.
  *
  * The index's compact form is for scanning a column of times against each

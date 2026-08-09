@@ -1,5 +1,7 @@
 import { serializeSigned } from 'hono/utils/cookie'
 import { describe, expect, it } from 'vitest'
+import type { Font } from '../../src/worker/fonts/index.ts'
+import { FONTS, fontPath } from '../../src/worker/fonts/index.ts'
 import { STYLESHEET_PATH } from '../../src/worker/styles.ts'
 import { TEST_COOKIE_SECRET, TEST_PASSPHRASE } from './support/secrets.ts'
 import { reader, readerAs, signIn } from './support/reader.ts'
@@ -16,6 +18,8 @@ describe('a reader who has not signed in', () => {
   it.each([
     ['the index', '/'],
     ['the stylesheet', STYLESHEET_PATH],
+    ['an Article', '/article/cyclingnews/Djx8QZAfLkekqGKNHgJzwj'],
+    ['the reading typeface', fontPath(FONTS[0] as Font)],
     ['a route that does not exist', '/nothing-here'],
     ['a path that looks like a static asset', '/fonts/source-serif.woff2'],
   ])('is sent to sign in from %s', async (_what, path) => {

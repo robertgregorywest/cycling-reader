@@ -12,6 +12,13 @@
   // Worker did. Free, and off by default.
   "observability": { "enabled": true },
 
+  // The reading typeface travels inside the Worker as bytes, because every
+  // route sits behind the passphrase (ADR-0003) and a font served from
+  // somewhere else would be both an exception to that and a third party told
+  // which Articles are read and when. `fallthrough` keeps wrangler's own
+  // defaults for every other kind of file.
+  "rules": [{ "type": "Data", "globs": ["**/*.woff2"], "fallthrough": true }],
+
   // The database an Ingest Run writes and the Worker only reads (ADR-0001).
   //
   // The id is an identifier and not a credential — it grants nothing without

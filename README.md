@@ -28,6 +28,7 @@ The decisions behind the architecture, and the alternatives rejected, are in
 | [0005](docs/adr/0005-stream-expires-archive-persists.md) | Stream expires at 30 days; saving mirrors to an archive |
 | [0006](docs/adr/0006-ingest-runs-fail-loudly.md) | Ingest runs assert their own success |
 | [0007](docs/adr/0007-d1-over-http-not-wrangler.md) | D1 over its HTTP API, including migrations |
+| [0008](docs/adr/0008-appearance-is-a-cookie-not-a-script.md) | Light and dark as a cookie; no client-side JavaScript |
 
 ## Shape
 
@@ -50,11 +51,16 @@ hours. Each Run records itself and asserts its own success, failing on a Feed
 that parses to nothing, on admitting nothing the Feed says is new, and on
 Extraction falling back to Readability too often.
 
-The Worker serves the index: a passphrase exchanged for a signed cookie, and
-behind it a compact list of Articles — headline, teaser, thumbnail, Source and
-relative time — deployed on every push to `main`. Until the article view
-arrives, every entry links out to its Source. The article view, Read state,
-filtering, Saving and Expiry are not built.
+The Worker serves the reading, deployed on every push to `main`: a passphrase
+exchanged for a signed cookie, and behind it a compact index — headline, teaser,
+thumbnail, Source and relative time, with a footer reporting the last successful
+Ingest Run and the Extraction method split — and the article view, set in a
+self-hosted variable serif with photography at reading size, captions kept and
+results tables that scroll in their own box on a phone. Opening an Article marks
+it Read, on every device. Light and dark follow the device, with an override
+that persists.
+
+Filtering, prev/next, Saving, the Archive and Expiry are not built.
 
 ## Working on it
 

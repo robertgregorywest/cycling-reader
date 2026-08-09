@@ -61,6 +61,12 @@ describe('the index', () => {
     expect(body).toContain('>3h</time>')
   })
 
+  it('opens an Article in the reader rather than at its Source', async () => {
+    await seed(anArticle({ source: 'cyclingweekly', guid: 'vw2mrextxwLxEPmGiQPyNB' }))
+
+    expect(await index()).toContain('href="/article/cyclingweekly/vw2mrextxwLxEPmGiQPyNB"')
+  })
+
   it('says so plainly when there is nothing to read', async () => {
     expect(await index()).toContain('Nothing yet.')
   })

@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { Env } from './env.ts'
 import { SIGN_IN_PATH, correctPassphrase, requireSession, startSession } from './session.ts'
-import { indexEntries } from './store.ts'
+import { indexEntries, readerHealth } from './store.ts'
 import { STYLESHEET, STYLESHEET_PATH } from './styles.ts'
 import { IndexPage } from './views/index.tsx'
 import { document } from './views/page.tsx'
@@ -54,9 +54,9 @@ app.post(SIGN_IN_PATH, async (c) => {
 })
 
 app.get('/', async (c) => {
-  const entries = await indexEntries(c.env.DB)
+  const [entries, health] = await Promise.all([indexEntries(c.env.DB), readerHealth(c.env.DB)])
 
-  return c.html(document(<IndexPage entries={entries} now={new Date()} />))
+  return c.html(document(<IndexPage entries={entries} health={health} now={new Date()} />))
 })
 
 /**

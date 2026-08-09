@@ -31,3 +31,45 @@ export function relativeTime(instant: string, now: Date): string {
 
   return `${Math.floor(elapsed / WEEK)}w`
 }
+
+/**
+ * How long ago, in words, for the footer.
+ *
+ * The index's compact form is for scanning a column of times against each
+ * other; the footer has one time and a sentence to put it in, where "2 hours
+ * ago" is read without being decoded.
+ */
+export function relativePhrase(instant: string, now: Date): string {
+  const elapsed = now.getTime() - new Date(instant).getTime()
+
+  if (Number.isNaN(elapsed)) return ''
+  if (elapsed < MINUTE) return 'just now'
+  if (elapsed < HOUR) return plural(Math.floor(elapsed / MINUTE), 'minute')
+  if (elapsed < DAY) return plural(Math.floor(elapsed / HOUR), 'hour')
+
+  return plural(Math.floor(elapsed / DAY), 'day')
+}
+
+/**
+ * How long the reader may go without a successful Ingest Run before the footer
+ * says so.
+ *
+ * Runs are scheduled every two hours, so this is three missed Runs. One missed
+ * Run is GitHub's shared schedulers being busy, which happens and is not worth
+ * a mark on the page; six hours of silence is something being wrong.
+ */
+export const STALE_AFTER = 6 * HOUR
+
+/** Whether the last successful Ingest Run is old enough to be worth saying so
+ * about. A reader that has never run is not stale — it is new. */
+export function isStale(lastSucceededAt: string | null, now: Date): boolean {
+  if (lastSucceededAt === null) return false
+
+  const elapsed = now.getTime() - new Date(lastSucceededAt).getTime()
+
+  return !Number.isNaN(elapsed) && elapsed >= STALE_AFTER
+}
+
+function plural(count: number, unit: string): string {
+  return `${count} ${unit}${count === 1 ? '' : 's'} ago`
+}

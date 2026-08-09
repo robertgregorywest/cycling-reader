@@ -158,6 +158,33 @@ body {
   color: var(--ink-quiet);
   text-align: center;
 }
+
+/* Health, quietly: smaller and greyer than the metadata of a single entry, so
+   that on a healthy day it is furniture. It has to be legible when looked for
+   and invisible when not. */
+.health {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--step) * 2);
+  margin-top: calc(var(--step) * 6);
+  padding-top: calc(var(--step) * 3);
+  border-top: 1px solid var(--rule);
+  color: var(--ink-quiet);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+
+.health .split::before { content: "\\00b7\\00a0"; }
+
+/* Stale is the one state that may raise its voice: a reader that has stopped
+   ingesting looks exactly like a quiet news day, and looking quiet is how it
+   goes unnoticed for a week. */
+.health--stale {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.health--stale::before { content: "\\26a0\\fe0f\\00a0"; }
 `.trimStart()
 
 /**

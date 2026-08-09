@@ -1,4 +1,5 @@
 import type { SourceId } from '../shared/article.ts'
+import type { ExtractionMethod } from '../shared/extraction.ts'
 import type { Section } from '../shared/section.ts'
 
 /**
@@ -75,6 +76,73 @@ export async function indexEntries(
   const { results } = await database.prepare(SELECT_INDEX).bind(limit).all<IndexRow>()
 
   return results.map(toIndexEntry)
+}
+
+/**
+ * What the index footer reports: whether the reader is current, and whether
+ * what is in it was extracted well.
+ *
+ * Both failures this describes are silent ones (ADR-0006). An Ingest Run that
+ * stopped running produces a reader that simply has nothing new in it, which
+ * on a quiet news day looks the same as a reader working perfectly; a Source
+ * redesign produces Articles that still read, only worse.
+ */
+export interface ReaderHealth {
+  /**
+   * When the last Ingest Run that succeeded wholly finished, or null before
+   * the first one there ever was — a database freshly migrated, which is not a
+   * degradation and must not be reported as one.
+   */
+  readonly lastSucceededAt: string | null
+  /**
+   * The Extraction method split across the Articles the index is showing,
+   * rather than across the last Run alone: one bad Run is noise, and what the
+   * footer is for is the trend the reader is actually reading.
+   */
+  readonly extractionMethods: Readonly<Record<ExtractionMethod, number>>
+}
+
+/**
+ * By `started_at`, matching the index the migration puts on that column, and
+ * not by `finished_at`: Runs cannot overlap — the workflow holds a
+ * non-cancelling concurrency group — so the two orders agree, and only one of
+ * them is indexed.
+ */
+const SELECT_LAST_SUCCEEDED = `SELECT finished_at
+FROM ingest_runs
+WHERE outcome = 'succeeded'
+ORDER BY started_at DESC
+LIMIT 1`
+
+/**
+ * The split over the same window the index lists, so that the footer describes
+ * the page it sits at the bottom of rather than the whole thirty-day Stream.
+ */
+const SELECT_EXTRACTION_SPLIT = `SELECT extraction_method, COUNT(*) AS articles
+FROM (SELECT extraction_method FROM articles ORDER BY published_at DESC LIMIT ?)
+GROUP BY extraction_method`
+
+/** How the footer reads its two facts: one round trip, not two. */
+export async function readerHealth(
+  database: D1Database,
+  limit: number = INDEX_LIMIT,
+): Promise<ReaderHealth> {
+  const [succeeded, split] = await database.batch<Record<string, unknown>>([
+    database.prepare(SELECT_LAST_SUCCEEDED),
+    database.prepare(SELECT_EXTRACTION_SPLIT).bind(limit),
+  ])
+
+  const extractionMethods = { targeted: 0, readability: 0, stub: 0 }
+
+  for (const row of split?.results ?? []) {
+    const method = row['extraction_method'] as ExtractionMethod
+    if (method in extractionMethods) extractionMethods[method] = row['articles'] as number
+  }
+
+  return {
+    lastSucceededAt: (succeeded?.results[0]?.['finished_at'] as string | undefined) ?? null,
+    extractionMethods,
+  }
 }
 
 function toIndexEntry(row: IndexRow): IndexEntry {

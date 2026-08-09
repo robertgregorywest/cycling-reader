@@ -1,8 +1,9 @@
+import type { ExtractionMethod } from '../../shared/extraction.ts'
 import { sourceName } from '../../shared/source.ts'
 import { candidates } from '../images.ts'
-import type { IndexEntry } from '../store.ts'
+import type { IndexEntry, ReaderHealth } from '../store.ts'
 import { STYLESHEET_PATH } from '../styles.ts'
-import { relativeTime } from '../time.ts'
+import { isStale, relativePhrase, relativeTime } from '../time.ts'
 
 /**
  * The index — the page that answers "is there anything to read?".
@@ -19,9 +20,11 @@ const THUMBNAIL_WIDTH = 72
 
 export function IndexPage({
   entries,
+  health,
   now,
 }: {
   readonly entries: readonly IndexEntry[]
+  readonly health: ReaderHealth
   readonly now: Date
 }) {
   return (
@@ -48,11 +51,65 @@ export function IndexPage({
               ))}
             </ol>
           )}
+
+          <Health health={health} now={now} />
         </div>
       </body>
     </html>
   )
 }
+
+/**
+ * The health footer: when the reader last successfully ingested, and how the
+ * Articles above it were extracted.
+ *
+ * It is here because the failures this reader has are silent ones (ADR-0006).
+ * The tripwires mail on failure, but a Run that stopped being scheduled at all
+ * sends no mail, and a reader quietly going stale is felt long before it is
+ * diagnosed. The index is the one page guaranteed to be looked at, so this is
+ * where the diagnosis is put — small, grey, and below everything worth
+ * reading, so that on a healthy day the eye passes over it.
+ */
+function Health({ health, now }: { readonly health: ReaderHealth; readonly now: Date }) {
+  const { lastSucceededAt, extractionMethods } = health
+  const stale = isStale(lastSucceededAt, now)
+
+  return (
+    <footer class={stale ? 'health health--stale' : 'health'}>
+      {lastSucceededAt === null ? (
+        // Before the first Ingest Run there has been no failure to report:
+        // this is a reader waiting for its first Run, not a stale one.
+        <span>No Ingest Run yet</span>
+      ) : (
+        <span>
+          Ingested <time datetime={lastSucceededAt}>{relativePhrase(lastSucceededAt, now)}</time>
+        </span>
+      )}
+      <Split methods={extractionMethods} />
+    </footer>
+  )
+}
+
+/**
+ * The Extraction method split, naming only the methods that occur.
+ *
+ * Zeroes are omitted because the healthy reading of this line is "everything
+ * came through the targeted path", and printing `0 readability · 0 stub` makes
+ * the reader check three numbers to learn it.
+ */
+function Split({ methods }: { readonly methods: Readonly<Record<ExtractionMethod, number>> }) {
+  const counts = ORDER.filter((method) => methods[method] > 0).map(
+    (method) => `${methods[method]} ${method}`,
+  )
+
+  if (counts.length === 0) return null
+
+  return <span class="split">{counts.join(' · ')}</span>
+}
+
+/** Best first, so a rising fallback count reads as something arriving from the
+ * right. */
+const ORDER: readonly ExtractionMethod[] = ['targeted', 'readability', 'stub']
 
 function Entry({ entry, now }: { readonly entry: IndexEntry; readonly now: Date }) {
   return (

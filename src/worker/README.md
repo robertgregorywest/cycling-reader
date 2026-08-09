@@ -16,7 +16,7 @@ boundary, and that boundary is ingest.
 | `session.ts` | The passphrase exchanged for a signed cookie, and the guard every other route sits behind |
 | `store.ts` | The reader's own SQL. Ingest's statements live in `ingest/store/sql.ts`; the two ask different questions of the same columns |
 | `images.ts` | The Source CDN's width convention, applied at render time |
-| `time.ts` | Relative time, as the index shows it |
+| `time.ts` | Relative time, as the index shows it, and how old is stale |
 | `styles.ts` | The stylesheet, served from a route so that it too sits behind the passphrase |
 | `views/` | The pages |
 
@@ -43,7 +43,7 @@ secrets; locally they go in `.dev.vars`, which is git-ignored. See
 
 ## What is not here yet
 
-The article view, Read state, filtering, the health footer, Saving and the
-Archive — tickets #8 onwards. Until the article view exists, **every index
+The article view, Read state, filtering, Saving and the Archive — tickets #9
+onwards. Until the article view exists, **every index
 entry links out to its Source**; a Stub will keep that link afterwards, because
 following it is how a Stub is read.

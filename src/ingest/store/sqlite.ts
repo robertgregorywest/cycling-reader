@@ -6,22 +6,28 @@ import type {
   StoredArticle,
   StoredArticleImage,
 } from '../../shared/article.ts'
+import type { RunRecord } from '../../shared/run.ts'
 import { applyMigrations } from './migrations.ts'
 import {
   DELETE_IMAGES,
   INSERT_ARTICLE,
   INSERT_IMAGE,
+  INSERT_RUN,
   SELECT_ARTICLE,
   SELECT_IMAGES,
+  SELECT_LAST_RUN,
   UPDATE_ARTICLE,
   insertArticleParams,
   insertImageParams,
+  insertRunParams,
   selectRevisions,
+  toRunRecord,
   toStoredArticle,
   toStoredImage,
   updateArticleParams,
   type ArticleRow,
   type ImageRow,
+  type RunRow,
   type SqlValue,
 } from './sql.ts'
 import type { ArticleStore } from './store.ts'
@@ -97,6 +103,16 @@ export class SqliteArticleStore implements ArticleStore {
     for (const image of images) {
       this.run(INSERT_IMAGE, insertImageParams(article, image))
     }
+  }
+
+  async lastRun(): Promise<RunRecord | null> {
+    const row = this.database.prepare(SELECT_LAST_RUN).get() as RunRow | undefined
+
+    return row === undefined ? null : toRunRecord(row)
+  }
+
+  async recordRun(run: RunRecord): Promise<void> {
+    this.run(INSERT_RUN, insertRunParams(run))
   }
 
   async article(source: SourceId, guid: string): Promise<StoredArticle | null> {

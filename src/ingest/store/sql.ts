@@ -6,6 +6,7 @@ import type {
   StoredArticleImage,
 } from '../../shared/article.ts'
 import type { ExtractionMethod } from '../../shared/extraction.ts'
+import type { RunOutcome, RunRecord } from '../../shared/run.ts'
 import type { Section } from '../../shared/section.ts'
 
 /**
@@ -108,6 +109,36 @@ export function selectRevisions(count: number): string {
   return `SELECT guid, updated_at FROM articles WHERE source = ? AND guid IN (${placeholders})`
 }
 
+export const INSERT_RUN = `INSERT INTO ingest_runs (
+  started_at, finished_at, admitted, revised, targeted, readability, stub, outcome, failure
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+export function insertRunParams(run: RunRecord): readonly SqlValue[] {
+  return [
+    run.startedAt,
+    run.finishedAt,
+    run.admitted,
+    run.revised,
+    run.extractionMethods.targeted,
+    run.extractionMethods.readability,
+    run.extractionMethods.stub,
+    run.outcome,
+    run.failure,
+  ]
+}
+
+/**
+ * The Run before this one, whatever became of it.
+ *
+ * Whatever became of it, because this is what "newer than the previous Run"
+ * is measured against: the last time an Ingest Run looked at the Feeds. A
+ * failed Run looked too — it may even have admitted Articles before its
+ * tripwire fired — so measuring against the last *successful* Run would raise
+ * a second, spurious alarm on top of every real one until the real one is
+ * fixed.
+ */
+export const SELECT_LAST_RUN = 'SELECT * FROM ingest_runs ORDER BY started_at DESC LIMIT 1'
+
 /** A row of `articles`, as either store reads it back. */
 export interface ArticleRow {
   source: string
@@ -135,6 +166,35 @@ export interface ImageRow {
   alt: string | null
   caption: string | null
   mirror_key: string | null
+}
+
+/** A row of `ingest_runs`, as either store reads it back. */
+export interface RunRow {
+  started_at: string
+  finished_at: string
+  admitted: number
+  revised: number
+  targeted: number
+  readability: number
+  stub: number
+  outcome: string
+  failure: string | null
+}
+
+export function toRunRecord(row: RunRow): RunRecord {
+  return {
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+    admitted: row.admitted,
+    revised: row.revised,
+    extractionMethods: {
+      targeted: row.targeted,
+      readability: row.readability,
+      stub: row.stub,
+    },
+    outcome: row.outcome as RunOutcome,
+    failure: row.failure,
+  }
 }
 
 export function toStoredArticle(row: ArticleRow): StoredArticle {

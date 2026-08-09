@@ -1,11 +1,13 @@
 import type { Article, SourceId } from '../shared/article.ts'
 import { STUB, type Extraction, type ExtractionMethod } from '../shared/extraction.ts'
+import type { RunRecord } from '../shared/run.ts'
 import { SKIP_REASONS, admit, type SkipReason } from './admission.ts'
 import type { SourceConfig } from './config.ts'
 import { extract } from './extraction/index.ts'
 import { parseFeed, type FeedItem } from './feed.ts'
 import { imagesWithin } from './images.ts'
 import type { ArticleStore } from './store/store.ts'
+import { tripwire } from './tripwires.ts'
 
 /**
  * Everything an Ingest Run touches outside itself. Passing them in is what
@@ -31,24 +33,23 @@ export interface SourceReport {
   readonly revised: number
   readonly skipped: Readonly<Record<SkipReason, number>>
   readonly extractionMethods: Readonly<Record<ExtractionMethod, number>>
+  /**
+   * When the newest item the Section Allowlist would admit was published, or
+   * null if the Feed offered none. This is what "the Feed has something newer
+   * than the previous Run" is read from, so it counts admissible items only:
+   * a Feed whose only fresh item is a product review is offering nothing.
+   */
+  readonly newestAdmissible: string | null
 }
 
 /**
  * What a Run did. An Ingest Run is the unit of health reporting, so the report
- * is the Run's output rather than something recovered from logs afterwards.
+ * is the Run's output rather than something recovered from logs afterwards —
+ * and it is the record written to `ingest_runs`, with the detail the tripwires
+ * needed added to it.
  */
-export interface IngestReport {
-  readonly startedAt: string
-  readonly finishedAt: string
-  readonly admitted: number
-  /**
-   * Articles Revised, counted apart from Articles admitted: three quarters of
-   * items are Revised at least once, so a Run that admits nothing and revises
-   * twenty is healthy, and a report that conflated the two would hide it.
-   */
-  readonly revised: number
+export interface IngestReport extends RunRecord {
   readonly skipped: Readonly<Record<SkipReason, number>>
-  readonly extractionMethods: Readonly<Record<ExtractionMethod, number>>
   readonly sources: readonly SourceReport[]
 }
 
@@ -59,18 +60,52 @@ export interface IngestReport {
  * Sources are read one after another rather than at once. There are two of
  * them, and a Run that is polite to the Sources it depends on is worth more
  * than a Run that finishes a few seconds sooner.
+ *
+ * The Run then asserts its own success before returning: it records what it
+ * did, and reports a failed outcome when a tripwire fires (ADR-0006). A Run
+ * that could not finish at all records itself as failed and rethrows, because
+ * the alternative — an unrecorded Run — is the silent failure the whole of
+ * this exists to prevent.
  */
 export async function ingest(dependencies: IngestDependencies): Promise<IngestReport> {
   const startedAt = dependencies.now().toISOString()
+  // Read before the Feeds, not after: this is the previous Run, and the row
+  // this Run is about to write must not be the one it compares itself against.
+  const previousRun = await dependencies.store.lastRun()
   const sources: SourceReport[] = []
 
-  for (const source of dependencies.sources) {
-    sources.push(await ingestSource(source, dependencies))
+  try {
+    for (const source of dependencies.sources) {
+      sources.push(await ingestSource(source, dependencies))
+    }
+  } catch (error) {
+    await dependencies.store.recordRun(
+      summarise(startedAt, sources, dependencies.now(), reasonFor(error)),
+    )
+    throw error
   }
 
+  // Counted first, then judged: the tripwires read the same report the caller
+  // is handed and the row is written from, so there is one account of the Run
+  // rather than one for the health check and another for everyone else.
+  const done = summarise(startedAt, sources, dependencies.now(), null)
+  const failure = tripwire(done, previousRun?.startedAt ?? null)
+
+  const report = failure === null ? done : { ...done, outcome: 'failed' as const, failure }
+  await dependencies.store.recordRun(report)
+  return report
+}
+
+/** What the Run did, counted up, and what became of it. */
+function summarise(
+  startedAt: string,
+  sources: readonly SourceReport[],
+  finishedAt: Date,
+  failure: string | null,
+): IngestReport {
   return {
     startedAt,
-    finishedAt: dependencies.now().toISOString(),
+    finishedAt: finishedAt.toISOString(),
     admitted: sum(sources.map((report) => report.admitted)),
     revised: sum(sources.map((report) => report.revised)),
     skipped: mergeCounts(SKIP_REASONS, sources.map((report) => report.skipped)),
@@ -78,8 +113,15 @@ export async function ingest(dependencies: IngestDependencies): Promise<IngestRe
       EXTRACTION_METHODS,
       sources.map((report) => report.extractionMethods),
     ),
+    outcome: failure === null ? 'succeeded' : 'failed',
+    failure,
     sources,
   }
+}
+
+/** What went wrong, in words the failure mail can be read from. */
+function reasonFor(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 const EXTRACTION_METHODS: readonly ExtractionMethod[] = ['targeted', 'readability', 'stub']
@@ -145,7 +187,26 @@ async function ingestSource(
     revised,
     skipped,
     extractionMethods,
+    newestAdmissible: newestPublication(admissible.map(({ item }) => item)),
   }
+}
+
+/**
+ * When the newest of these items was published, or null if none of them says.
+ *
+ * Publication rather than Revision: a Revised Article is not a new Article,
+ * and an item whose `updated` has advanced has already been admitted. An item
+ * carrying neither timestamp cannot be placed in time at all, and is left out
+ * rather than being treated as having arrived just now — which would fire a
+ * tripwire on every Run.
+ */
+function newestPublication(items: readonly FeedItem[]): string | null {
+  const published = items
+    .map((item) => item.publishedAt ?? item.updatedAt)
+    .filter((instant): instant is string => instant !== null)
+
+  // ISO 8601 in UTC throughout, which orders lexically.
+  return published.length === 0 ? null : published.reduce((a, b) => (a > b ? a : b))
 }
 
 /**

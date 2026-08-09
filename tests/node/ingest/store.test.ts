@@ -6,6 +6,7 @@ import { D1ArticleStore, D1HttpDatabase } from '../../../src/ingest/store/d1.ts'
 import { SqliteArticleStore } from '../../../src/ingest/store/sqlite.ts'
 import type { ArticleStore } from '../../../src/ingest/store/store.ts'
 import type { Article } from '../../../src/shared/article.ts'
+import type { RunRecord } from '../../../src/shared/run.ts'
 import { TEST_CREDENTIALS, fakeD1, type FakeD1 } from '../../support/d1.ts'
 
 /**
@@ -45,6 +46,16 @@ const REVISED: Article = {
   updatedAt: '2026-08-09T09:30:00.000Z',
   bodyHtml: '<p>A body.</p><table><tr><td>1</td></tr></table>',
   textLength: 8,
+}
+
+const RUN: RunRecord = {
+  startedAt: '2026-08-09T06:00:00.000Z',
+  finishedAt: '2026-08-09T06:04:12.000Z',
+  admitted: 7,
+  revised: 2,
+  extractionMethods: { targeted: 6, readability: 1, stub: 2 },
+  outcome: 'succeeded',
+  failure: null,
 }
 
 /** Each implementation, opened the way the code that owns it opens it. */
@@ -184,6 +195,50 @@ describe.each(IMPLEMENTATIONS)('$name', ({ open }) => {
           mirrorKey: null,
         },
       ])
+    })
+  })
+
+  /**
+   * An Ingest Run is the unit of health reporting, and the row it leaves is
+   * what the next Run judges itself against and what the index footer reads
+   * (ADR-0006).
+   */
+  describe('a Run it records', () => {
+    it('comes back as it was written', async () => {
+      await store.recordRun(RUN)
+
+      expect(await store.lastRun()).toEqual(RUN)
+    })
+
+    it('holds why a failed Run failed', async () => {
+      const failed: RunRecord = {
+        ...RUN,
+        outcome: 'failed',
+        failure: 'cyclingnews: the Feed parsed to zero items',
+      }
+      await store.recordRun(failed)
+
+      expect(await store.lastRun()).toEqual(failed)
+    })
+
+    it('is the previous Run only until a later one is recorded', async () => {
+      await store.recordRun(RUN)
+      await store.recordRun({ ...RUN, startedAt: '2026-08-09T08:00:00.000Z', admitted: 1 })
+
+      expect(await store.lastRun()).toMatchObject({
+        startedAt: '2026-08-09T08:00:00.000Z',
+        admitted: 1,
+      })
+    })
+
+    it('has no predecessor before the first Run there ever was', async () => {
+      expect(await store.lastRun()).toBeNull()
+    })
+
+    it('refuses an outcome that is neither success nor failure', async () => {
+      await expect(
+        store.recordRun({ ...RUN, outcome: 'mostly' as RunRecord['outcome'] }),
+      ).rejects.toThrow(/CHECK/i)
     })
   })
 

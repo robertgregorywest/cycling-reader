@@ -40,17 +40,28 @@ if (sources.length === 0) {
 
 const target = open(options)
 
+let report: IngestReport
 try {
-  const report = await ingest({
+  report = await ingest({
     sources,
     fetchFeed: fetchText,
     fetchPage: fetchText,
     now: () => new Date(),
     store: target.store,
   })
-  print(target.description, report)
 } finally {
   target.close()
+}
+
+print(target.description, report)
+
+// A Run that hit a tripwire exits non-zero, because GitHub only sends mail on
+// failure and this is the whole of how a silent failure is heard about
+// (ADR-0006). The exit code is set rather than taken, so that what the Run did
+// is on stdout before the process goes.
+if (report.outcome === 'failed') {
+  console.error(`\nThis Ingest Run failed: ${report.failure}`)
+  process.exitCode = 1
 }
 
 /**
@@ -84,6 +95,7 @@ async function fetchText(url: string): Promise<string> {
 
 function print(store: string, report: IngestReport): void {
   console.log(`store       ${store}`)
+  console.log(`outcome     ${report.outcome}`)
   console.log(`started     ${report.startedAt}`)
   console.log(`finished    ${report.finishedAt}`)
   console.log(`admitted    ${report.admitted}`)

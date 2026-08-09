@@ -46,7 +46,9 @@ Lifecycle  stream expires at 30 days; saving mirrors images and keeps
 
 Extraction, its fixture corpus, Revision detection, and the Ingest Run into
 either store are built, and a scheduled workflow runs it into D1 every two
-hours. The health tripwires and the Worker are not.
+hours. Each Run records itself and asserts its own success, failing on a Feed
+that parses to nothing, on admitting nothing the Feed says is new, and on
+Extraction falling back to Readability too often. The Worker is not built.
 
 ## Working on it
 

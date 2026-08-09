@@ -5,21 +5,27 @@ import type {
   StoredArticle,
   StoredArticleImage,
 } from '../../shared/article.ts'
+import type { RunRecord } from '../../shared/run.ts'
 import {
   DELETE_IMAGES,
   INSERT_ARTICLE,
   INSERT_IMAGE,
+  INSERT_RUN,
   SELECT_ARTICLE,
   SELECT_IMAGES,
+  SELECT_LAST_RUN,
   UPDATE_ARTICLE,
   insertArticleParams,
   insertImageParams,
+  insertRunParams,
   selectRevisions,
+  toRunRecord,
   toStoredArticle,
   toStoredImage,
   updateArticleParams,
   type ArticleRow,
   type ImageRow,
+  type RunRow,
   type SqlValue,
 } from './sql.ts'
 import type { ArticleStore } from './store.ts'
@@ -81,6 +87,17 @@ export class D1ArticleStore implements ArticleStore {
     if (updated?.changes === 0) {
       throw new Error(`No Article to revise: ${article.source} ${article.guid}`)
     }
+  }
+
+  async lastRun(): Promise<RunRecord | null> {
+    const [found] = await this.database.batch<RunRow>([{ sql: SELECT_LAST_RUN, params: [] }])
+
+    const row = found?.rows[0]
+    return row === undefined ? null : toRunRecord(row)
+  }
+
+  async recordRun(run: RunRecord): Promise<void> {
+    await this.database.batch([{ sql: INSERT_RUN, params: insertRunParams(run) }])
   }
 
   async article(source: SourceId, guid: string): Promise<StoredArticle | null> {

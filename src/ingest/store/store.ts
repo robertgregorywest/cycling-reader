@@ -5,6 +5,7 @@ import type {
   StoredArticle,
   StoredArticleImage,
 } from '../../shared/article.ts'
+import type { RunRecord } from '../../shared/run.ts'
 
 /**
  * Where an Ingest Run writes. Two real implementations exist rather than one
@@ -37,6 +38,22 @@ export interface ArticleStore {
    * index, where a Revision is not news and must not move it.
    */
   reviseArticle(article: Article, images: readonly ArticleImage[]): Promise<void>
+
+  /**
+   * The Run before this one, or null before the first Run there ever was.
+   *
+   * Read at the start of a Run, because "the Feed offers something newer than
+   * the previous Run yet nothing was admitted" is a tripwire and this is the
+   * instant it is measured against.
+   */
+  lastRun(): Promise<RunRecord | null>
+
+  /**
+   * Record what a Run did, once, as it ends. Called for a failed Run too: a
+   * Run that failed without recording itself is the silent failure ADR-0006
+   * exists to prevent.
+   */
+  recordRun(run: RunRecord): Promise<void>
 
   article(source: SourceId, guid: string): Promise<StoredArticle | null>
 

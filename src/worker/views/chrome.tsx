@@ -38,17 +38,25 @@ export function Head({ title }: { readonly title: string }) {
 export function Masthead({
   appearance,
   returnTo,
-  back,
+  home,
 }: {
   readonly appearance: Appearance
   /** The path this page is at, so that changing the appearance returns to it. */
   readonly returnTo: string
-  readonly back?: boolean
+  /**
+   * The index this page is a way back to, filter and all — absent on the index
+   * itself, which is already there.
+   *
+   * The filter travels with the reader: someone who opened an Article from
+   * within Tech expects the way back to be Tech, and an index that had quietly
+   * reset to everything would make them choose their Section twice.
+   */
+  readonly home?: string
 }) {
   return (
     <header class="masthead">
-      {back === true ? (
-        <a class="masthead__home" href="/">
+      {home !== undefined ? (
+        <a class="masthead__home" href={home}>
           Cycling Reader
         </a>
       ) : (

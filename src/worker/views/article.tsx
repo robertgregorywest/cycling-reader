@@ -2,8 +2,10 @@ import { raw } from 'hono/html'
 import { sourceName } from '../../shared/source.ts'
 import type { Appearance } from '../appearance.ts'
 import { presentBody } from '../body.ts'
+import type { IndexFilter } from '../filters.ts'
+import { NO_FILTER, filterPath, filterQuery } from '../filters.ts'
 import { READING_SIZES, readingSrc, readingSrcSet } from '../images.ts'
-import type { ReaderArticle } from '../store.ts'
+import type { Neighbour, Neighbours, ReaderArticle } from '../store.ts'
 import { absoluteTime } from '../time.ts'
 import { Head, Masthead } from './chrome.tsx'
 
@@ -22,9 +24,16 @@ import { Head, Masthead } from './chrome.tsx'
 
 export function ArticlePage({
   article,
+  neighbours,
+  filter,
   appearance,
 }: {
   readonly article: ReaderArticle
+  /** Where the reader can go from here without going back. */
+  readonly neighbours: Neighbours
+  /** The lens the reader arrived under, carried so that leaving this Article
+   * — forwards or back — does not silently leave their Section too. */
+  readonly filter: IndexFilter
   readonly appearance: Appearance
 }) {
   return (
@@ -32,7 +41,11 @@ export function ArticlePage({
       <Head title={`${article.headline} — Cycling Reader`} />
       <body>
         <div class="shell">
-          <Masthead appearance={appearance} returnTo={articlePath(article)} back={true} />
+          <Masthead
+            appearance={appearance}
+            returnTo={articlePath(article, filter)}
+            home={filterPath(filter)}
+          />
 
           <article class="article">
             <header class="article__head">
@@ -58,14 +71,94 @@ export function ArticlePage({
               </a>
             </footer>
           </article>
+
+          <ReadOn neighbours={neighbours} filter={filter} />
         </div>
       </body>
     </html>
   )
 }
 
-export function articlePath(article: { source: string; guid: string }): string {
-  return `/article/${article.source}/${encodeURIComponent(article.guid)}`
+/**
+ * Where this Article is: its Source, its guid, and the filter it is being read
+ * under.
+ *
+ * The filter rides in the query string rather than in the path because it is
+ * not part of the Article's identity — the same Article under two Sections is
+ * one Article — and because a link stripped of its query still resolves to the
+ * right piece, only without its neighbours.
+ */
+export function articlePath(
+  article: { source: string; guid: string },
+  filter: IndexFilter = NO_FILTER,
+): string {
+  return `/article/${article.source}/${encodeURIComponent(article.guid)}${filterQuery(filter)}`
+}
+
+/**
+ * The end of the Article, and the way on to the next one.
+ *
+ * Reading three pieces should not be three round trips through the index, so
+ * the reader is handed the neighbours by name: the headline is what decides
+ * whether the next one is worth opening, and "Next ›" alone makes that
+ * decision blind.
+ *
+ * The first Article has no previous and the last has no next, and under a
+ * filter both ends arrive sooner. A missing neighbour is simply absent — not a
+ * disabled control, which would be a thing to look at that cannot be used.
+ * When neither exists there is nothing here at all.
+ */
+function ReadOn({
+  neighbours,
+  filter,
+}: {
+  readonly neighbours: Neighbours
+  readonly filter: IndexFilter
+}) {
+  const { previous, next } = neighbours
+
+  if (previous === null && next === null) return null
+
+  return (
+    <nav class="read-on" aria-label="Articles">
+      <Onward neighbour={previous} filter={filter} towards="previous" />
+      <Onward neighbour={next} filter={filter} towards="next" />
+    </nav>
+  )
+}
+
+const LABEL = { previous: 'Newer', next: 'Older' } as const
+
+/**
+ * One neighbour. Named "Newer" and "Older" rather than "Previous" and "Next":
+ * the index is in time order, so time is what the reader is moving through,
+ * and prev/next on a page that also has browser back is one ambiguity too
+ * many.
+ *
+ * A Stub links to its Source, exactly as it does from the index — following
+ * that link is the whole of how a Stub is read.
+ */
+function Onward({
+  neighbour,
+  filter,
+  towards,
+}: {
+  readonly neighbour: Neighbour | null
+  readonly filter: IndexFilter
+  readonly towards: 'previous' | 'next'
+}) {
+  if (neighbour === null) return <span class={`read-on__side read-on__side--${towards}`} />
+
+  return (
+    <a
+      class={`read-on__side read-on__side--${towards}`}
+      href={neighbour.isStub ? neighbour.url : articlePath(neighbour, filter)}
+      rel={neighbour.isStub ? 'noreferrer' : towards === 'next' ? 'next' : 'prev'}
+    >
+      <span class="read-on__label">{LABEL[towards]}</span>
+      <span class="read-on__headline">{neighbour.headline}</span>
+    </a>
+  )
 }
 
 function Body({ article }: { readonly article: ReaderArticle }) {

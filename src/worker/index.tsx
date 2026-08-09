@@ -8,6 +8,7 @@ import {
   indexEntries,
   markAllRead,
   markRead,
+  neighbours,
   readerArticle,
   readerHealth,
   recordVisit,
@@ -125,17 +126,38 @@ app.post(READ_ALL_PATH, async (c) => {
  * is read state managed by hand, which is the chore this exists to remove.
  * Nothing about the Article's content is touched — that is ingest's alone
  * (ADR-0001) — and the write is idempotent, so a reload costs one no-op UPDATE.
+ *
+ * The query string carries the filter the reader arrived under, so that moving
+ * on from here moves on within their Section rather than out of it. It is
+ * parsed exactly as the index parses it: a filter naming nothing is the whole
+ * reader, here as there.
  */
 app.get('/article/:source/:guid', async (c) => {
+  const filter = parseFilter(new URL(c.req.url).searchParams)
+
   const article = await readerArticle(c.env.DB, c.req.param('source'), c.req.param('guid'))
 
   // An Article that Expired while its link sat in another tab. Not an error
   // worth a page of its own: the index is where the reader wants to be.
   if (article === null) return c.notFound()
 
-  await markRead(c.env.DB, article, new Date())
+  // Together: the mark touches nothing the neighbours are read from, so the
+  // reader waits for whichever is slower rather than for both in turn.
+  const [either] = await Promise.all([
+    neighbours(c.env.DB, article, filter),
+    markRead(c.env.DB, article, new Date()),
+  ])
 
-  return c.html(document(<ArticlePage article={article} appearance={readAppearance(c)} />))
+  return c.html(
+    document(
+      <ArticlePage
+        article={article}
+        neighbours={either}
+        filter={filter}
+        appearance={readAppearance(c)}
+      />,
+    ),
+  )
 })
 
 /**

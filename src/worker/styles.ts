@@ -649,6 +649,63 @@ body {
   text-decoration-color: var(--accent);
   text-underline-offset: 0.16em;
 }
+
+/* Reading on: newer to the left, older to the right, which is the direction
+   the index runs down the page. Below the Article's own footer, because the
+   piece finishes before the next one is offered. */
+.read-on {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(var(--step) * 4);
+  margin: calc(var(--step) * 8) 0 calc(var(--step) * 12);
+  padding-top: calc(var(--step) * 5);
+  border-top: 1px solid var(--rule);
+}
+
+/* Both halves keep their column whether or not there is an Article in them, so
+   that the last Article in a Section does not pull "Newer" across the page. */
+.read-on__side {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--step) * 2);
+  color: inherit;
+  text-decoration: none;
+}
+
+.read-on__side--next { text-align: right; }
+
+.read-on__label {
+  color: var(--ink-quiet);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.read-on__headline {
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+a.read-on__side:hover .read-on__headline { color: var(--accent); }
+
+a.read-on__side:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+/* Single column on a phone, in reading order: older first, because that is
+   where a reader working through the day's news is going next. */
+@media (max-width: 32rem) {
+  .read-on { grid-template-columns: 1fr; }
+
+  .read-on__side--next { order: -1; text-align: left; }
+
+  /* An absent neighbour leaves no gap once the columns are gone. */
+  span.read-on__side { display: none; }
+}
 `.trimStart()
 
 /**

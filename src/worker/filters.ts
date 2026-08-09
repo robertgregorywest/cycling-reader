@@ -54,6 +54,20 @@ export function isFiltered(filter: IndexFilter): boolean {
  * the reader's shortest URL.
  */
 export function filterPath(filter: IndexFilter): string {
+  return `/${filterQuery(filter)}`
+}
+
+/**
+ * The filter as a query string, `?…` and all, or the empty string when there
+ * is none.
+ *
+ * An Article carries it too, and for the same reason the index does: a reader
+ * who opened an Article from within a Section is still reading that Section,
+ * so prev and next stay inside it and the way back is the index they came
+ * from. Put in the URL rather than remembered, so that the browser's own back
+ * button keeps agreeing with the page.
+ */
+export function filterQuery(filter: IndexFilter): string {
   const params = new URLSearchParams()
 
   if (filter.section !== null) params.set(SECTION_PARAM, filter.section)
@@ -61,5 +75,5 @@ export function filterPath(filter: IndexFilter): string {
 
   const query = params.toString()
 
-  return query === '' ? '/' : `/?${query}`
+  return query === '' ? '' : `?${query}`
 }

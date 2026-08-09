@@ -66,7 +66,7 @@ export function IndexPage({
           ) : (
             <ol class="index">
               {entries.map((entry) => (
-                <Entry entry={entry} now={now} />
+                <Entry entry={entry} filter={filter} now={now} />
               ))}
             </ol>
           )}
@@ -229,13 +229,23 @@ function Split({ methods }: { readonly methods: Readonly<Record<ExtractionMethod
  * right. */
 const ORDER: readonly ExtractionMethod[] = ['targeted', 'readability', 'stub']
 
-function Entry({ entry, now }: { readonly entry: IndexEntry; readonly now: Date }) {
+function Entry({
+  entry,
+  filter,
+  now,
+}: {
+  readonly entry: IndexEntry
+  /** Handed on to the Article, so that reading onwards from it stays inside
+   * the lens the reader chose here. */
+  readonly filter: IndexFilter
+  readonly now: Date
+}) {
   return (
     <li class={entryClass(entry)}>
       {/* An Article opens in the reader; a Stub goes straight to its Source,
           because following that link is the whole of how a Stub is read and
           an intermediate page would be a click that says nothing. */}
-      <a href={entry.isStub ? entry.url : articlePath(entry)}>
+      <a href={entry.isStub ? entry.url : articlePath(entry, filter)}>
         <Thumbnail entry={entry} />
         <span>
           <span class="headline">{entry.headline}</span>

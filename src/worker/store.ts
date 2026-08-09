@@ -56,11 +56,23 @@ export interface IndexEntry {
  */
 export const INDEX_LIMIT = 100
 
+/**
+ * The order the reader reads in, newest first — and a *total* one.
+ *
+ * `published_at` alone is not: two Articles published in the same second would
+ * order arbitrarily, and prev and next are defined against this ordering, so
+ * an arbitrary tie is a pair of Articles that can each be the other's next.
+ * Source and guid break it, which together identify an Article, so no two rows
+ * can tie on all three.
+ */
+const NEWEST_FIRST = 'published_at DESC, source DESC, guid DESC'
+const OLDEST_FIRST = 'published_at ASC, source ASC, guid ASC'
+
 const selectIndex = (filter: IndexFilter): string => `SELECT
   source, guid, url, headline, teaser, section, published_at, updated_at,
   hero_image_url, extraction_method, read_at
 FROM articles${where(filter)}
-ORDER BY published_at DESC
+ORDER BY ${NEWEST_FIRST}
 LIMIT ?`
 
 /**
@@ -71,13 +83,19 @@ LIMIT ?`
  * The fragments are fixed text and the values are always bound, so a query
  * parameter never reaches the database as SQL.
  */
-function where(filter: IndexFilter): string {
+function conditions(filter: IndexFilter): readonly string[] {
   const conditions: string[] = []
 
   if (filter.section !== null) conditions.push('section = ?')
   if (filter.source !== null) conditions.push('source = ?')
 
-  return conditions.length === 0 ? '' : `\nWHERE ${conditions.join(' AND ')}`
+  return conditions
+}
+
+function where(filter: IndexFilter): string {
+  const clauses = conditions(filter)
+
+  return clauses.length === 0 ? '' : `\nWHERE ${clauses.join(' AND ')}`
 }
 
 function binds(filter: IndexFilter): readonly string[] {
@@ -210,6 +228,108 @@ export async function markRead(
 }
 
 /**
+ * The Article either side of this one, as the article view links to them.
+ *
+ * Only what a link needs. The neighbour's body is several tens of kilobytes
+ * that rendering a link never touches, and there are two of them on every
+ * Article opened.
+ */
+export interface Neighbour {
+  readonly source: SourceId
+  readonly guid: string
+  readonly headline: string
+  /** A Stub is read at its Source, so a link to one goes there directly —
+   * exactly as the index's does. */
+  readonly isStub: boolean
+  readonly url: string
+}
+
+/**
+ * Which way each of these is: `previous` is up the index, towards what was
+ * published more recently, and `next` is down it, towards what was published
+ * before. The index is newest first, so next is older — the direction reading
+ * through a day's news actually goes.
+ */
+export interface Neighbours {
+  readonly previous: Neighbour | null
+  readonly next: Neighbour | null
+}
+
+interface NeighbourRow {
+  source: string
+  guid: string
+  headline: string
+  url: string
+  extraction_method: string
+}
+
+/**
+ * The nearest Article on one side, under the filter the reader is reading
+ * through.
+ *
+ * The cursor is the whole ordering key and not `published_at` alone, compared
+ * as a row value: `(published_at, source, guid) < (…)` is the same comparison
+ * the ORDER BY makes, so "the next row after this one" means the same thing in
+ * both places and an Article cannot be skipped or repeated at a tie.
+ *
+ * Deliberately not bounded by `INDEX_LIMIT`. That limit is a budget for how
+ * much of the Stream one page renders, not a statement that the Stream ends
+ * there, and a reader who has read a hundred deep has earned the hundred and
+ * first rather than a dead end.
+ */
+const selectNeighbour = (filter: IndexFilter, towards: keyof Neighbours): string => `SELECT
+  source, guid, headline, url, extraction_method
+FROM articles
+WHERE (published_at, source, guid) ${towards === 'next' ? '<' : '>'} (?, ?, ?)
+  ${conditions(filter)
+    .map((condition) => `AND ${condition}`)
+    .join('\n  ')}
+ORDER BY ${towards === 'next' ? NEWEST_FIRST : OLDEST_FIRST}
+LIMIT 1`
+
+/**
+ * Where the reader can go from here without returning to the index.
+ *
+ * Both sides in one batch: an Article in the middle of a Section has two
+ * neighbours, and asking for them one after the other would put a second round
+ * trip in front of every page.
+ *
+ * Either side may be null — the newest Article has nothing above it and the
+ * oldest nothing below — and under a filter the ends come sooner, which is the
+ * point: navigation stays inside the Section the reader chose rather than
+ * quietly leaving it.
+ */
+export async function neighbours(
+  database: D1Database,
+  article: ReaderArticle,
+  filter: IndexFilter = NO_FILTER,
+): Promise<Neighbours> {
+  const cursor = [article.publishedAt, article.source, article.guid]
+
+  const [previous, next] = await database.batch<NeighbourRow>([
+    database.prepare(selectNeighbour(filter, 'previous')).bind(...cursor, ...binds(filter)),
+    database.prepare(selectNeighbour(filter, 'next')).bind(...cursor, ...binds(filter)),
+  ])
+
+  return {
+    previous: toNeighbour(previous?.results[0]),
+    next: toNeighbour(next?.results[0]),
+  }
+}
+
+function toNeighbour(row: NeighbourRow | undefined): Neighbour | null {
+  if (row === undefined) return null
+
+  return {
+    source: row.source as SourceId,
+    guid: row.guid,
+    headline: row.headline,
+    url: row.url,
+    isStub: row.extraction_method === 'stub',
+  }
+}
+
+/**
  * How many Articles arrived since the Last Visit.
  *
  * New is counted against arrival — `first_seen_at`, which re-Extraction never
@@ -336,7 +456,7 @@ LIMIT 1`
  */
 const selectExtractionSplit = (filter: IndexFilter): string => `SELECT
   extraction_method, COUNT(*) AS articles
-FROM (SELECT extraction_method FROM articles${where(filter)} ORDER BY published_at DESC LIMIT ?)
+FROM (SELECT extraction_method FROM articles${where(filter)} ORDER BY ${NEWEST_FIRST} LIMIT ?)
 GROUP BY extraction_method`
 
 /** How the footer reads its two facts: one round trip, not two. */

@@ -1,11 +1,12 @@
 # Source layout
 
-One package, three source roots — two deploy targets do not justify workspace
+One package, four source roots — two deploy targets do not justify workspace
 overhead at this size.
 
 | Root | Runtime | Holds |
 | --- | --- | --- |
 | `ingest/` | Node, on GitHub Actions | The Ingest Run: Feeds, the Section Allowlist, Extraction, writes to D1 |
+| `expiry/` | Node, on GitHub Actions | Expiry: the retention horizon, and the deletion behind it |
 | `worker/` | Cloudflare Workers | The reading experience. Reads only; never extracts |
 | `shared/` | Both | Domain types and the schema the two runtimes agree on |
 
@@ -24,3 +25,12 @@ live in `ingest/store/sql.ts` for the same reason.
 Neither imports from the other: they run on different runtimes with different
 budgets, which is the whole point of
 [ADR-0001](../docs/adr/0001-split-ingest-and-serve-runtimes.md).
+
+`expiry/` is on the Node side of that line and may import from `shared/` and
+from `ingest/store/`, whose D1 transport and migrations are how anything on
+this side of the line reaches the database — `scripts/migrate.ts` reaches for
+the same two. It is a root of its own rather than a file inside `ingest/`
+because Expiry is not part of an Ingest Run and must not be able to become one:
+a wedged ingest must not stop deletion, and an Expiry bug must not stop the
+reader updating
+([ADR-0005](../docs/adr/0005-stream-expires-archive-persists.md)).

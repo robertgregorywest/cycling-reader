@@ -38,7 +38,10 @@ Ingest  ── GitHub Actions, every 2h ─────────────�
           → fetch new and revised → extract → write D1            │
                                                                   ▼
 Serve   ── Cloudflare Worker (Hono, server-rendered) ────────  D1 + R2
-          passphrase cookie → compact index → article view
+          passphrase cookie → compact index → article view        ▲
+                                                                  │
+Expiry  ── GitHub Actions, daily ─────────────────────────────────┘
+          delete unsaved articles published over 30 days ago
 
 Lifecycle  stream expires at 30 days; saving mirrors images and keeps
 ```
@@ -64,7 +67,13 @@ Saving an Article copies its images into R2 in the same breath, so that the
 Archive stays readable after the Source's CDN has moved on; the Archive is a
 destination of its own, linked from every masthead.
 
-Expiry is not built.
+Expiry runs daily on its own schedule, deleting Stream Articles published more
+than thirty days ago and the image records within them, by age alone and never
+touching a Saved one. Each run prints the horizon it measured and how many
+Articles it deleted.
+
+What is not built is the sweep of Mirrored objects in R2 that nothing has
+Saved, which un-Saving deliberately leaves behind.
 
 ## Working on it
 
@@ -79,15 +88,16 @@ pnpm golden:update # after changing Extraction on purpose; read the diff
 pnpm ingest        # an Ingest Run against both live Feeds, into local/
 pnpm ingest --db /tmp/reader.db --source cyclingweekly
 pnpm ingest --store d1  # what the schedule runs: the same Run, into D1
+pnpm expire        # Expiry against local/; --store d1 is what the schedule runs
 pnpm migrate       # apply migrations/ to D1; --list to see what is outstanding
 pnpm dev           # the Worker, locally, against the live D1 database
 pnpm run deploy    # what the push-to-main workflow runs
 pnpm --silent passphrase  # hash a passphrase for the PASSPHRASE_HASH secret
 ```
 
-`pnpm ingest`, `pnpm ingest --store d1` and `pnpm migrate` are the commands
-here that touch the network; the last two also need Cloudflare credentials in
-the environment, which [`docs/setup.md`](docs/setup.md) covers. Run without
+`pnpm ingest`, `pnpm ingest --store d1`, `pnpm expire --store d1` and
+`pnpm migrate` are the commands here that touch the network; the last three
+also need Cloudflare credentials in the environment, which [`docs/setup.md`](docs/setup.md) covers. Run without
 `--store d1`, an Ingest Run writes a SQLite file, applying the same migrations
 D1 runs, so it can be inspected by opening the database. The file is
 git-ignored: the repository is public and the reading content is not.

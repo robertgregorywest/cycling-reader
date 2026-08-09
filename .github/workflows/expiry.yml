@@ -1,0 +1,52 @@
+name: Expiry
+
+# Deletion of Stream Articles past thirty days (ADR-0005), once a day.
+#
+# Its own workflow rather than a step appended to ingest: a wedged Ingest Run
+# must not stop deletion, and an Expiry bug must not stop the reader updating.
+# Daily rather than hourly because the horizon moves by a day at a time —
+# running it more often would delete the same Articles a few hours sooner and
+# say nothing new in the log.
+on:
+  schedule:
+    # 03:25 UTC: the quiet end of the night for both Sources, well clear of the
+    # even-hour Ingest Runs, and off the hour and the half hour, which is when
+    # everything else on GitHub's shared schedulers runs.
+    - cron: '25 3 * * *'
+  workflow_dispatch:
+
+# One Expiry run at a time. Two runs would compute the same horizon and delete
+# the same rows, and the second would report a count of zero that means
+# something other than "nothing expired".
+concurrency:
+  group: expiry
+  cancel-in-progress: false
+
+jobs:
+  expire:
+    runs-on: ubuntu-latest
+    # Two statements against D1. Long enough to be generous about a slow API.
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Credentials come from repository secrets and are never committed: this
+      # repository is public (ADR-0002). The run prints the horizon it used and
+      # how many Articles it deleted, which is where an anomalous spike is
+      # seen; a run that throws fails this step, which is how it becomes mail.
+      - name: Expire Stream Articles in D1
+        run: pnpm expire --store d1
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

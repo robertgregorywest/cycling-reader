@@ -239,3 +239,4 @@ to a third party, and nothing to sign up for.
 | #5 | Cloudflare account, wrangler login, D1 database, API token, three GitHub Secrets, the same three in `.dev.vars`, `pnpm migrate`, Actions write permission |
 | #7 | A passphrase, two Worker secrets, a `workers.dev` subdomain |
 | #12 | An R2 bucket — the only step that may want a payment method — and `pnpm migrate` again, for the migration Mirroring added |
+| #13 | Nothing new: the daily Expiry workflow runs on the three secrets from #5 |

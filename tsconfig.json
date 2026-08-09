@@ -23,11 +23,12 @@
     "jsx": "react-jsx",
     "jsxImportSource": "hono/jsx"
   },
-  // The Node half: ingest, Extraction, and the scripts around them. The Worker
-  // is checked separately because it runs on workerd, where `node` types are a
-  // lie and D1 is a global.
+  // The Node half: ingest, Expiry, Extraction, and the scripts around them.
+  // The Worker is checked separately because it runs on workerd, where `node`
+  // types are a lie and D1 is a global.
   "include": [
     "src/ingest",
+    "src/expiry",
     "src/shared",
     "scripts",
     "tests/node",

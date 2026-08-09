@@ -92,5 +92,7 @@ the index: Saved is a fact about durability, not about visibility.
 
 ## What is not here yet
 
-Expiry, which is the other half of ADR-0005 — and the sweep of Mirrored objects
-that nothing has Saved, which un-Saving deliberately leaves behind.
+The sweep of Mirrored objects that nothing has Saved, which un-Saving
+deliberately leaves behind. Expiry — the other half of ADR-0005 — is built, but
+not here: it runs on Node from its own daily workflow (`src/expiry/`), because
+the Worker reads and does not delete.

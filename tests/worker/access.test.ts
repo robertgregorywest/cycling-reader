@@ -89,18 +89,22 @@ describe('the passphrase', () => {
 
 describe('a cookie that was not issued here', () => {
   it('is refused when its value has been edited', async () => {
-    const { name, value, signature } = await parts(await signIn())
+    const cookie = await signIn()
+    const { name, value, signature } = await parts(cookie)
 
-    const tampered = `${name}=${value.replace(/.$/, 'X')}.${signature}`
+    const tampered = `${name}=${value.replace(/.$/, other)}.${signature}`
 
+    expect(tampered).not.toBe(cookie)
     expect((await readerAs(tampered, '/')).status).toBe(302)
   })
 
   it('is refused when its signature has been edited', async () => {
-    const { name, value, signature } = await parts(await signIn())
+    const cookie = await signIn()
+    const { name, value, signature } = await parts(cookie)
 
-    const tampered = `${name}=${value}.${signature.replace(/^./, 'X')}`
+    const tampered = `${name}=${value}.${signature.replace(/^./, other)}`
 
+    expect(tampered).not.toBe(cookie)
     expect((await readerAs(tampered, '/')).status).toBe(302)
   })
 
@@ -126,6 +130,19 @@ describe('a cookie that was not issued here', () => {
     expect(response.headers.get('set-cookie') ?? '').toContain('Max-Age=0')
   })
 })
+
+/**
+ * Any character but this one.
+ *
+ * Substituting a fixed letter is not tampering: the signature is base64 over
+ * an HMAC, so a fixed 'X' matches the character already there about one time
+ * in sixty-four, and a tamper that changes nothing leaves a perfectly valid
+ * cookie that is admitted exactly as it should be. That failed a deploy on
+ * 2026-08-09 having passed every one before it.
+ */
+function other(character: string): string {
+  return character === 'X' ? 'Y' : 'X'
+}
 
 /**
  * A signed cookie taken apart: the value, and the signature over it. Split on

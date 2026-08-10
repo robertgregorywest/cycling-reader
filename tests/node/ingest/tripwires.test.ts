@@ -63,9 +63,9 @@ describe('a Run that went well', () => {
     expect(await store.lastRun()).toEqual({
       startedAt: RUN_AT,
       finishedAt: RUN_AT,
-      admitted: 7,
+      admitted: 13,
       revised: 0,
-      extractionMethods: { targeted: 4, readability: 1, stub: 2 },
+      extractionMethods: { targeted: 4, readability: 7, stub: 2 },
       outcome: 'succeeded',
       failure: null,
     })
@@ -102,7 +102,7 @@ describe('a Feed that parses to zero items', () => {
           : fetchFeedFromCorpus(url),
     })
 
-    expect(report.admitted).toBe(4)
+    expect(report.admitted).toBe(10)
     expect(report.failure).toMatch(/cyclingweekly/)
   })
 })
@@ -183,21 +183,51 @@ describe('a Run that admits nothing the Feed says is newer than the previous Run
  */
 describe('a Run whose Extractions fall back to Readability', () => {
   /** Every page served as the redesigned body container, which defeats the
-   * targeted path at both Sources. */
+   * targeted path at both Future PLC Sources. */
   const redesigned = () => Promise.resolve(readFixture('cyclingweekly-redesigned-body-container'))
 
-  it('fails the Run above the threshold', async () => {
-    const report = await run({ fetchPage: redesigned })
+  /**
+   * Velo carries enough real admitted bodies (6) on its own to cross the
+   * per-Source floor, unlike either Future PLC Source's small fixture feed —
+   * so it is the seam this asks through: "if a Source the tripwire judges
+   * fell back this often, would it be caught?" (ADR-0011). Overriding one
+   * field of the real, checked-in config is the smallest way to ask that
+   * without fabricating a Feed.
+   */
+  it('is judged per Source, naming the one that crossed the threshold', async () => {
+    const report = await run({ sources: [{ ...sourceConfig('velo'), targetedExtraction: true }] })
 
-    expect(report.extractionMethods.targeted).toBe(0)
+    expect(report.extractionMethods).toEqual({ targeted: 0, readability: 6, stub: 0 })
     expect(report.outcome).toBe('failed')
-    expect(report.failure).toMatch(/Readability produced \d+ of \d+ bodies \(100%\)/)
+    expect(report.failure).toBe(
+      'velo: Readability produced 6 of 6 bodies (100%), above the 20% a Source redesign is read from',
+    )
   })
 
-  it('passes a Run at the threshold, where the corpus already sits', async () => {
-    const report = await run()
+  it('does not judge a Source that runs no platform the targeted path was ever written against', async () => {
+    // Velo, unmodified: the same 100% Readability rate above, but exempt
+    // rather than failing every Run — this is that Source's normal shape.
+    const report = await run({ sources: [sourceConfig('velo')] })
 
-    expect(report.extractionMethods).toEqual({ targeted: 4, readability: 1, stub: 2 })
+    expect(report.extractionMethods).toEqual({ targeted: 0, readability: 6, stub: 0 })
+    expect(report.outcome).toBe('succeeded')
+  })
+
+  /**
+   * Neither Future PLC Source's fixture feed carries enough admitted items on
+   * its own to cross the per-Source floor even at a 100% fallback rate — the
+   * fixture corpus is sized for admission and Extraction dispatch, not for
+   * exercising a tripwire that needs real-world volume to fire. A redesign at
+   * either Source is still caught in production, where a Source publishes far
+   * more than five Articles between Runs.
+   */
+  it('does not fail a Run where every Source stayed under the floor', async () => {
+    const report = await run({
+      sources: [sourceConfig('cyclingnews'), sourceConfig('cyclingweekly')],
+      fetchPage: redesigned,
+    })
+
+    expect(report.extractionMethods.targeted).toBe(0)
     expect(report.outcome).toBe('succeeded')
   })
 

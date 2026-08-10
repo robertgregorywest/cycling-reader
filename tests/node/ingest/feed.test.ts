@@ -26,6 +26,11 @@ describe.each(FEED_FIXTURES)('$source', (fixture) => {
 
   it('tolerates an item with no updated timestamp', () => {
     expect(items.some((item) => item.updatedAt === null)).toBe(true)
+  })
+
+  // Velo's Feed carries no `<updated>` element at all — every item is judged
+  // by `pubDate` alone, which `revisionOf` already falls back to.
+  it.skipIf(fixture.source === 'velo')('carries an updated timestamp on some items', () => {
     expect(items.some((item) => item.updatedAt !== null)).toBe(true)
   })
 

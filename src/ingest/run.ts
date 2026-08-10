@@ -34,6 +34,12 @@ export interface SourceReport {
   readonly skipped: Readonly<Record<SkipReason, number>>
   readonly extractionMethods: Readonly<Record<ExtractionMethod, number>>
   /**
+   * Copied from the Source's own config rather than looked up again by id, so
+   * the tripwires judge the Source this Run was actually given — the same
+   * seam that lets a test hand `ingest` a Source it built itself (ADR-0011).
+   */
+  readonly targetedExtraction: boolean
+  /**
    * When the newest item the Section Allowlist would admit was published, or
    * null if the Feed offered none. This is what "the Feed has something newer
    * than the previous Run" is read from, so it counts admissible items only:
@@ -187,6 +193,7 @@ async function ingestSource(
     revised,
     skipped,
     extractionMethods,
+    targetedExtraction: source.targetedExtraction,
     newestAdmissible: newestPublication(admissible.map(({ item }) => item)),
   }
 }

@@ -10,8 +10,8 @@ empty database is the default outcome.
 
 An Ingest Run therefore asserts its own success and exits non-zero when a Feed
 parses to zero items, when nothing new is admitted despite the Feed's newest
-item post-dating the previous run, or when the Readability-fallback rate exceeds
-20%.
+item post-dating the previous run, or when a Source's own Readability-fallback
+rate exceeds 20% ([ADR-0011](0011-fallback-tripwire-is-per-source-and-skips-velo.md)).
 
 ## Consequences
 

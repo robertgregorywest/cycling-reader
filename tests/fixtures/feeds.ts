@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import type { SourceId } from '../../src/shared/article.ts'
 
 /**
- * The Feed corpus: real RSS from both Sources, committed, so that an Ingest
+ * The Feed corpus: real RSS from every Source, committed, so that an Ingest
  * Run is driven by what the Sources actually publish rather than by XML
  * written to make the parser pass.
  *
@@ -31,6 +31,12 @@ export const FEED_FIXTURES: readonly FeedFixture[] = [
     source: 'cyclingweekly',
     url: 'https://www.cyclingweekly.com/feeds.xml',
     retrievedAt: '2026-08-09',
+    items: 6,
+  },
+  {
+    source: 'velo',
+    url: 'https://velo.outsideonline.com/feed',
+    retrievedAt: '2026-08-10',
     items: 6,
   },
 ]

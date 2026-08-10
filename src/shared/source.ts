@@ -10,6 +10,7 @@ import type { SourceId } from './article.ts'
 export const SOURCE_NAMES: Readonly<Record<SourceId, string>> = {
   cyclingnews: 'Cyclingnews',
   cyclingweekly: 'Cycling Weekly',
+  velo: 'Velo',
 }
 
 export function sourceName(id: SourceId): string {

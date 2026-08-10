@@ -2,7 +2,7 @@ import type { ExtractionMethod } from './extraction.ts'
 import type { Section } from './section.ts'
 
 /** The Sources the reader draws from. See `src/ingest/config.ts`. */
-export type SourceId = 'cyclingnews' | 'cyclingweekly'
+export type SourceId = 'cyclingnews' | 'cyclingweekly' | 'velo'
 
 /**
  * An Article — a single piece of journalism from a Source, identified by the

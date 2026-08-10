@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { sectionOf } from '../../../src/ingest/admission.ts'
-import { SOURCES, sourceConfig } from '../../../src/ingest/config.ts'
+import { SOURCES, sourceConfig, type SourceConfig } from '../../../src/ingest/config.ts'
 import { SECTIONS } from '../../../src/shared/section.ts'
 
 /**
@@ -39,5 +39,37 @@ describe('the Section Allowlist', () => {
 
     expect(sectionOf('pro-cycling/womens-cycling/an-article', cyclingnews)).toBe('womens')
     expect(sectionOf('pro-cycling/an-article', cyclingnews)).toBe('other')
+  })
+
+  describe('categorySections (ADR-0010)', () => {
+    const source: SourceConfig = {
+      id: 'cyclingnews',
+      feedUrl: 'https://example.test/feed',
+      sectionPaths: { 'road-racing': 'racing', 'road-racing/gear': 'tech' },
+      commercePaths: [],
+      liveBlogPaths: [],
+      targetedExtraction: true,
+      categorySections: { "Women's Cycling": 'womens' },
+    }
+
+    it('refines a racing result into the Category-mapped Section', () => {
+      expect(sectionOf('road-racing/an-article', source, ["Women's Cycling"])).toBe('womens')
+    })
+
+    it('leaves racing alone when no Category matches', () => {
+      expect(sectionOf('road-racing/an-article', source, ['Some Other Category'])).toBe('racing')
+    })
+
+    it('never overrides a Section other than racing', () => {
+      expect(sectionOf('road-racing/gear/an-article', source, ["Women's Cycling"])).toBe('tech')
+    })
+
+    it('does nothing for a Source with no categorySections entries', () => {
+      const cyclingnews = sourceConfig('cyclingnews')
+
+      expect(sectionOf('pro-cycling/racing/an-article', cyclingnews, ["Women's Cycling"])).toBe(
+        'racing',
+      )
+    })
   })
 })

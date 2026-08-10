@@ -95,18 +95,29 @@ function admittedNothingNew(run: RunUnderTest, previousRun: string | null): stri
  * Articles still read, which is why this is otherwise invisible: they simply
  * get worse, keeping page furniture the targeted path would have dropped.
  *
+ * Judged per Source, like `admittedNothingNew`: a redesign happens to one
+ * Source while the others carry on, and a rate summed across all of them
+ * would both hide that and, for a Source running no platform the targeted
+ * path was ever written against, fire on every Run forever (ADR-0011) — such
+ * a Source is excluded here rather than counted at all.
+ *
  * Stubs are not counted on either side. A Stub is a legitimate Article whose
  * page could not be fetched or read at all, not a body of lesser quality.
  */
 function fallbackRateTooHigh(run: RunUnderTest): string | null {
-  const { targeted, readability } = run.extractionMethods
-  const bodies = targeted + readability
-  if (bodies < MINIMUM_EXTRACTIONS) return null
+  for (const source of run.sources) {
+    if (!source.targetedExtraction) continue
 
-  const rate = readability / bodies
-  if (rate <= FALLBACK_THRESHOLD) return null
+    const { targeted, readability } = source.extractionMethods
+    const bodies = targeted + readability
+    if (bodies < MINIMUM_EXTRACTIONS) continue
 
-  return `Readability produced ${readability} of ${bodies} bodies (${percentage(rate)}), above the ${percentage(FALLBACK_THRESHOLD)} a Source redesign is read from`
+    const rate = readability / bodies
+    if (rate <= FALLBACK_THRESHOLD) continue
+
+    return `${source.source}: Readability produced ${readability} of ${bodies} bodies (${percentage(rate)}), above the ${percentage(FALLBACK_THRESHOLD)} a Source redesign is read from`
+  }
+  return null
 }
 
 function percentage(rate: number): string {

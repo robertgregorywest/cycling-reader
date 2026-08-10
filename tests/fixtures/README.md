@@ -1,6 +1,6 @@
 # The fixture corpus
 
-Real HTML and RSS from both Sources, committed so that a Future PLC redesign
+Real HTML and RSS from every Source, committed so that a Source redesign
 presents as a failing test rather than a guessing game, and so that Extraction
 and the Ingest Run can be repaired with no network and no cloud account. See
 [ADR-0004](../../docs/adr/0004-targeted-extraction-with-readability-fallback.md).
@@ -22,11 +22,24 @@ Source, recorded in `feeds.ts`.
 | `cyclingweekly-news-item` | A short news item on the second Source |
 | `cyclingweekly-tech-review` | A tech piece |
 | `cyclingweekly-redesigned-body-container` | A page that defeats the targeted path, so Readability runs |
+| `velo-race-report` | A race report on a Source running neither platform above |
+| `velo-womens-race-report` | Tagged `Women's Cycling` in the Feed, refining `racing` into `womens` (ADR-0010) |
+| `velo-news-item` | A short news item |
+| `velo-tech-piece` | A gear piece under `road/road-gear` |
+| `velo-tech-piece-gravel` | A gear piece under `gravel/gravel-gear`, proving the longest-prefix win over `gravel` |
+| `velo-unrecognised-path` | A path the Section Allowlist does not map, admitted as `other` |
+
+Every Velo page here extracts by Readability: Velo runs no platform the
+targeted extractor's `#article-body` selector recognises, so the targeted path
+is never expected to succeed for it (ADR-0011) — there is no Velo equivalent
+of `cyclingweekly-redesigned-body-container`, because no live Velo page
+behaves any differently from another in this respect.
 
 ## The Feed corpus
 
-`feeds/cyclingnews.xml` and `feeds/cyclingweekly.xml` are the Feeds the Ingest
-Run is driven with. Between them they carry every case admission has to decide:
+`feeds/cyclingnews.xml`, `feeds/cyclingweekly.xml` and `feeds/velo.xml` are the
+Feeds the Ingest Run is driven with. Between the first two they carry every
+case admission has to decide:
 
 | Item | Covers |
 | --- | --- |
@@ -40,12 +53,33 @@ Run is driven with. Between them they carry every case admission has to decide:
 | `products/…`, `group-tests/…`, `reviews/pedals/…` | Commerce paths, excluded |
 | `travel/…` | An unrecognised path, admitted as `other` |
 
+`feeds/velo.xml` carries the six pages above, admitting cleanly into `racing`,
+`womens` (via Category, not path — ADR-0010), `news`, `tech` twice (proving
+the longest-prefix win) and `other`. Velo has no commerce path distinct from
+its gear coverage to exclude, and no paid flag or live blog to demonstrate —
+see the `SourceConfig` comments in `src/ingest/config.ts`.
+
 The Ingest Run tests serve each Article's page from `pages/` by its URL, and
 serve `cyclingnews-removed-article` for any Article the page corpus does not
 hold — which is the page a Run meets when an Article is pulled after the Feed
 advertised it. The `travel` Article is served
 `cyclingweekly-redesigned-body-container`, so that one Extraction in every Run
 takes the Readability path.
+
+### Velo's Feed shape
+
+Velo's `<description>` is a WordPress excerpt, not the plain teaser text the
+other two Sources carry: a leading `<figure><img>` holding the hero image (Velo
+sets no `media:content` or `enclosure` at all), the real teaser text, then a
+"Read the full article at… on…" line pointing back at the Source. `parseFeed`
+parses it as HTML rather than reading it as plain text so that one path covers
+both shapes — see `parseDescription` in `src/ingest/feed.ts`.
+
+Velo's Feed also carries no `<updated>` element on any item, ever: every
+Article is judged by `pubDate` alone, which `revisionOf` already falls back to.
+`tests/node/ingest/feed.test.ts` skips the "carries an updated timestamp on
+some items" assertion for this Source rather than asserting something the
+Source never does.
 
 ### Revisions
 
@@ -63,7 +97,8 @@ header, the whitespace, the escaping — is as served.
 Emptying `<content:encoded>` records a decision rather than saving space: the
 Feeds carry a partial body there, and the reader never reads it. Bodies come
 from the Article's page, so a fixture that offered one would let a bug pass
-unnoticed.
+unnoticed. Velo's Feed carries no `<content:encoded>` at all, so `feeds/velo.xml`
+holds its six items exactly as served, with nothing emptied.
 
 ## Provenance
 
@@ -79,6 +114,13 @@ which also holds the URL. Two entries need explaining:
   no live page defeats the targeted path while leaving an Article behind it —
   which is exactly the failure the Readability fallback exists for. Renaming the
   container is the smallest faithful stand-in for the redesign.
+
+Every Velo page's retrieval date is later than the other two Sources': it was
+onboarded afterwards. Velo item dates in `feeds/velo.xml` were deliberately
+chosen from before the fixed clock the Ingest Run tests anchor to
+(`2026-08-09T06:00:00Z`) rather than from the day of retrieval — an item dated
+after it would read, to `admittedNothingNew`, as a Run that dropped something
+on the floor.
 
 ## The one normalisation
 

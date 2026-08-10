@@ -45,14 +45,15 @@ function run(overrides: Partial<Parameters<typeof ingest>[0]> = {}): Promise<Ing
   })
 }
 
-describe('a first Run against both Feeds', () => {
-  it('admits the Articles both Sources published', async () => {
+describe('a first Run against all Feeds', () => {
+  it('admits the Articles every Source published', async () => {
     const report = await run()
 
-    expect(report.admitted).toBe(7)
+    expect(report.admitted).toBe(13)
     expect(report.sources.map((source) => [source.source, source.feedItems, source.admitted])).toEqual([
       ['cyclingnews', 6, 4],
       ['cyclingweekly', 6, 3],
+      ['velo', 6, 6],
     ])
   })
 
@@ -70,7 +71,7 @@ describe('a first Run against both Feeds', () => {
   it('reports which method produced each Extraction', async () => {
     const report = await run()
 
-    expect(report.extractionMethods).toEqual({ targeted: 4, readability: 1, stub: 2 })
+    expect(report.extractionMethods).toEqual({ targeted: 4, readability: 7, stub: 2 })
   })
 
   it('runs between the two instants it reports', async () => {
@@ -88,7 +89,7 @@ describe('a Run repeated immediately', () => {
 
     expect(second.admitted).toBe(0)
     expect(second.revised).toBe(0)
-    expect(second.skipped['already-ingested']).toBe(7)
+    expect(second.skipped['already-ingested']).toBe(13)
     expect(second.extractionMethods).toEqual({ targeted: 0, readability: 0, stub: 0 })
   })
 

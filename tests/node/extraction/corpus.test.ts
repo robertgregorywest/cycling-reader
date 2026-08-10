@@ -22,6 +22,14 @@ const EXPECTED_METHOD: Readonly<Record<string, ExtractionMethod>> = {
   'cyclingweekly-news-item': 'targeted',
   'cyclingweekly-tech-review': 'targeted',
   'cyclingweekly-redesigned-body-container': 'readability',
+  // Velo runs neither Source's platform, so its `#article-body` container is
+  // never present — every Velo page here takes the Readability path.
+  'velo-race-report': 'readability',
+  'velo-womens-race-report': 'readability',
+  'velo-news-item': 'readability',
+  'velo-tech-piece': 'readability',
+  'velo-tech-piece-gravel': 'readability',
+  'velo-unrecognised-path': 'readability',
 }
 
 describe.each(FIXTURES)('$name', (entry: Fixture) => {
@@ -50,13 +58,14 @@ it('covers every kind of page the corpus exists to cover', () => {
       'tech-piece',
       'removed-article',
       'redesigned-body-container',
+      'unrecognised-path',
     ]),
   )
 })
 
-it('draws on both Sources', () => {
+it('draws on every Source', () => {
   expect(new Set(FIXTURES.map((entry) => entry.source))).toEqual(
-    new Set(['cyclingnews', 'cyclingweekly']),
+    new Set(['cyclingnews', 'cyclingweekly', 'velo']),
   )
 })
 

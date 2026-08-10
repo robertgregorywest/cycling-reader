@@ -34,11 +34,22 @@ export function admit(item: FeedItem, source: SourceConfig): Admission {
   if (matchesAny(path, source.liveBlogPaths)) return { admitted: false, reason: 'live-blog' }
   if (matchesAny(path, source.commercePaths)) return { admitted: false, reason: 'commerce-path' }
 
-  return { admitted: true, section: sectionOf(path, source) }
+  return { admitted: true, section: sectionOf(path, source, item.categories) }
 }
 
-/** The Section a Source's URL path maps into. Longest matching prefix wins. */
-export function sectionOf(path: string, source: SourceConfig): Section {
+/**
+ * The Section a Source's URL path maps into. Longest matching prefix wins.
+ *
+ * A `racing` result may be refined by Category (ADR-0010): a Source that
+ * cannot separate this coverage by path at all can still opt in, by naming
+ * the Category in its `categorySections`. No other Section is ever
+ * overridden this way, and a Source with no entries is unaffected.
+ */
+export function sectionOf(
+  path: string,
+  source: SourceConfig,
+  categories: readonly string[] = [],
+): Section {
   let best: { readonly prefix: string; readonly section: Section } | null = null
 
   for (const [prefix, section] of Object.entries(source.sectionPaths)) {
@@ -46,7 +57,16 @@ export function sectionOf(path: string, source: SourceConfig): Section {
     if (best === null || prefix.length > best.prefix.length) best = { prefix, section }
   }
 
-  return best?.section ?? UNRECOGNISED_SECTION
+  const section = best?.section ?? UNRECOGNISED_SECTION
+  if (section !== 'racing') return section
+
+  const categorySections = source.categorySections ?? {}
+  for (const category of categories) {
+    const refined = categorySections[category]
+    if (refined !== undefined) return refined
+  }
+
+  return section
 }
 
 /** The path of an Article's URL, without its leading or trailing slashes. */

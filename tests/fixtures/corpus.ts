@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url'
 export interface Fixture {
   /** Fixture name; also the file name without its extension. */
   readonly name: string
-  readonly source: 'cyclingnews' | 'cyclingweekly'
+  readonly source: 'cyclingnews' | 'cyclingweekly' | 'velo'
   /** What this page is in the corpus to cover. */
   readonly kind:
     | 'race-report'
@@ -21,6 +21,7 @@ export interface Fixture {
     | 'tech-piece'
     | 'removed-article'
     | 'redesigned-body-container'
+    | 'unrecognised-path'
   /** The page's URL at its Source. */
   readonly url: string
   /** ISO date the page was retrieved. */
@@ -96,6 +97,48 @@ export const FIXTURES: readonly Fixture[] = [
     retrievedAt: '2026-08-08',
     derivation:
       'cyclingweekly-news-item with id="article-body" renamed to id="article-content", standing in for the Future PLC redesign that defeats the targeted path. Nothing else is altered.',
+  },
+  {
+    name: 'velo-race-report',
+    source: 'velo',
+    kind: 'race-report',
+    url: 'https://velo.outsideonline.com/road/road-racing/pogacar-confirmed-for-2026-vuelta-a-espana/',
+    retrievedAt: '2026-08-10',
+  },
+  {
+    name: 'velo-womens-race-report',
+    source: 'velo',
+    kind: 'race-report',
+    url: 'https://velo.outsideonline.com/road/road-racing/tour-de-france-femmes/wiebes-wins-stage-1/',
+    retrievedAt: '2026-08-10',
+  },
+  {
+    name: 'velo-news-item',
+    source: 'velo',
+    kind: 'news-item',
+    url: 'https://velo.outsideonline.com/news/massive-30-rider-pileup-blocks-road-at-tour-of-poland/',
+    retrievedAt: '2026-08-10',
+  },
+  {
+    name: 'velo-tech-piece',
+    source: 'velo',
+    kind: 'tech-piece',
+    url: 'https://velo.outsideonline.com/road/road-gear/time-trial-tech-2026/',
+    retrievedAt: '2026-08-10',
+  },
+  {
+    name: 'velo-tech-piece-gravel',
+    source: 'velo',
+    kind: 'tech-piece',
+    url: 'https://velo.outsideonline.com/gravel/gravel-gear/new-bike-tech-obed-campagnolo-reserve-gravel-launches/',
+    retrievedAt: '2026-08-10',
+  },
+  {
+    name: 'velo-unrecognised-path',
+    source: 'velo',
+    kind: 'unrecognised-path',
+    url: 'https://velo.outsideonline.com/urban/police-arrest-man-runs-down-cyclist-assaults-another/',
+    retrievedAt: '2026-08-10',
   },
 ]
 

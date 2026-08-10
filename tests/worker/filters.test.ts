@@ -143,8 +143,11 @@ describe('the filter in force', () => {
   it('is the whole index when nothing has been chosen', async () => {
     const body = await index()
 
-    expect(body).toContain('<a class="chip chip--on" href="/" aria-current="true">All</a>')
-    expect(body).toContain('<a class="chip chip--on" href="/" aria-current="true">Both</a>')
+    // Section's "All" and Source's "All" are the same on-chip markup, one per
+    // filter row.
+    expect(
+      body.match(/<a class="chip chip--on" href="\/" aria-current="true">All<\/a>/g),
+    ).toHaveLength(2)
   })
 
   it('says so when it has nothing under it, rather than looking like an empty reader', async () => {

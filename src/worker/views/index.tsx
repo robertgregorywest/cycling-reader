@@ -134,7 +134,7 @@ function Filters({ filter }: { readonly filter: IndexFilter }) {
 
       <nav aria-label="Source">
         <ul class="chips">
-          <Chip target={{ ...filter, source: null }} on={filter.source === null} label="Both" />
+          <Chip target={{ ...filter, source: null }} on={filter.source === null} label="All" />
           {SOURCE_IDS.map((source: SourceId) => (
             <Chip
               target={{ ...filter, source }}

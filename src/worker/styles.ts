@@ -240,6 +240,10 @@ body {
   background: none;
   color: var(--ink-quiet);
   font: inherit;
+  /* .visit sets text-transform: uppercase, but a <button>'s UA stylesheet
+     resets it to none regardless, so it has to be restated here to match the
+     rest of the index's navigation. */
+  text-transform: uppercase;
   text-decoration: underline;
   text-decoration-color: var(--rule);
   text-underline-offset: 0.25em;

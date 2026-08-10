@@ -839,6 +839,32 @@ a.read-on__side:focus-visible {
 `.trimStart()
 
 /**
+ * A cheap, non-cryptographic fingerprint of the stylesheet's own text.
+ *
+ * Not security — cache-busting. FNV-1a is enough: a different digest for a
+ * different file is all a query string needs to be.
+ */
+function fingerprint(text: string): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16)
+}
+
+/**
+ * The stylesheet's URL, versioned by its own content.
+ *
+ * The route serves it `immutable` for a year (index.tsx), which is only
+ * honest if the URL changes whenever the bytes do — otherwise a reader's
+ * browser holds a deploy-old design forever rather than asking again. Every
+ * page links here rather than to `STYLESHEET_PATH` directly, so a deploy that
+ * changes the CSS is a deploy that changes the link.
+ */
+export const STYLESHEET_HREF = `${STYLESHEET_PATH}?v=${fingerprint(STYLESHEET)}`
+
+/**
  * The sign-in page's own styling, inline.
  *
  * The sign-in page is the one thing served before authentication, so it cannot

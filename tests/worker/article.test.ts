@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { FONTS, fontPath } from '../../src/worker/fonts/index.ts'
-import { STYLESHEET_PATH } from '../../src/worker/styles.ts'
+import { STYLESHEET_HREF } from '../../src/worker/styles.ts'
 import { aStub, anArticle, seed } from './support/articles.ts'
 import { readerAs, signIn } from './support/reader.ts'
 
@@ -88,9 +88,9 @@ describe('reading', () => {
   it('is set in the self-hosted serif, which the page declares and serves', async () => {
     await seed(anArticle({ guid: GUID }))
 
-    expect(await article()).toContain(`href="${STYLESHEET_PATH}"`)
+    expect(await article()).toContain(`href="${STYLESHEET_HREF}"`)
 
-    const stylesheet = await (await readerAs(cookie, STYLESHEET_PATH)).text()
+    const stylesheet = await (await readerAs(cookie, STYLESHEET_HREF)).text()
 
     expect(stylesheet).toContain('font-family: "Source Serif 4"')
     // Swap, so an Article is readable in the fallback serif while a hundred
@@ -197,7 +197,7 @@ describe('a results table', () => {
     // instead of it.
     expect(body).toContain('Giulio Pellizzari')
 
-    const stylesheet = await (await readerAs(cookie, STYLESHEET_PATH)).text()
+    const stylesheet = await (await readerAs(cookie, STYLESHEET_HREF)).text()
     expect(stylesheet).toContain('overflow-x: auto')
   })
 })

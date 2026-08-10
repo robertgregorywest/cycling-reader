@@ -1,6 +1,6 @@
 import type { Appearance } from '../appearance.ts'
 import { nextAppearance } from '../appearance.ts'
-import { STYLESHEET_PATH } from '../styles.ts'
+import { STYLESHEET_HREF } from '../styles.ts'
 
 /**
  * What every page is built out of: the head, and the one line of furniture
@@ -23,7 +23,7 @@ export function Head({ title }: { readonly title: string }) {
           public DNS. */}
       <meta name="robots" content="noindex, nofollow" />
       <title>{title}</title>
-      <link rel="stylesheet" href={STYLESHEET_PATH} />
+      <link rel="stylesheet" href={STYLESHEET_HREF} />
     </head>
   )
 }

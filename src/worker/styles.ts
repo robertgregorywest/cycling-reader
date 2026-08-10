@@ -48,24 +48,24 @@ ${fontFaces()}
  */
 @media (prefers-color-scheme: dark) {
   :root[data-theme="auto"] {
-    --page: #14151a;
-    --ink: #e9e7e2;
+    --page: #1e2026;
+    --ink: #d9d7d2;
     --ink-quiet: #9298a8;
-    --rule: #2a2c35;
+    --rule: #34363f;
     --accent: #e0736b;
-    --raised: #1c1e25;
+    --raised: #262832;
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --page: #14151a;
-  --ink: #e9e7e2;
+  --page: #1e2026;
+  --ink: #d9d7d2;
   --ink-quiet: #9298a8;
-  --rule: #2a2c35;
+  --rule: #34363f;
   --accent: #e0736b;
-  --raised: #1c1e25;
+  --raised: #262832;
 }
 
 :root {
@@ -271,7 +271,12 @@ body {
   padding: 0;
 }
 
-.chips + .chips { margin-top: var(--step); }
+/* The Category and Source rows sit inside their own <nav>, so it is the navs
+   that are adjacent siblings — not the <ul>s directly — and that is what this
+   has to target. Wrapped chips need the same gap above the next row that they
+   already have between each other, or a wrap reads as one ragged row instead
+   of two. */
+.filters nav + nav { margin-top: var(--step); }
 
 .chip {
   display: block;
@@ -845,7 +850,7 @@ a.read-on__side:focus-visible {
 export const SIGN_IN_STYLES = `
 :root { color-scheme: light dark; --page: #fbfaf7; --ink: #191a1d; --ink-quiet: #5f6472; --rule: #e5e1d8; --accent: #9c2b26; }
 @media (prefers-color-scheme: dark) {
-  :root { --page: #14151a; --ink: #e9e7e2; --ink-quiet: #9298a8; --rule: #2a2c35; --accent: #e0736b; }
+  :root { --page: #1e2026; --ink: #d9d7d2; --ink-quiet: #9298a8; --rule: #34363f; --accent: #e0736b; }
 }
 * { box-sizing: border-box; }
 body {

@@ -61,7 +61,9 @@ Ingest Run and the Extraction method split — and the article view, set in a
 self-hosted variable serif with photography at reading size, captions kept and
 results tables that scroll in their own box on a phone. Opening an Article marks
 it Read, on every device. Light and dark follow the device, with an override
-that persists.
+that persists. On the index the masthead title reloads the index, filter and
+all, for the tab left open while an Ingest Run lands underneath it; no page the
+reader renders is cached, so asking for the latest gets it.
 
 Saving an Article copies its images into R2 in the same breath, so that the
 Archive stays readable after the Source's CDN has moved on; the Archive is a

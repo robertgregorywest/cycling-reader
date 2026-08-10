@@ -51,6 +51,32 @@ const app = new Hono<{ Bindings: Env }>()
  */
 app.use('*', requireSession())
 
+/**
+ * Nothing the reader renders is ever cached; everything it serves alongside is
+ * cached for a year.
+ *
+ * Every page here is a view of state that changes underneath it — what has
+ * arrived, what has been Read, what is Saved — so a cached copy is a wrong
+ * copy. Without this the masthead title would be a refresh in name only: it is
+ * a link to the page the reader is already on, and a browser is entitled to
+ * answer that from its own cache and show them exactly what they were trying
+ * to get past.
+ *
+ * The rule is drawn at the content type rather than route by route, so that a
+ * page added later is uncacheable by default rather than by remembering —
+ * the same argument `requireSession` makes above. The fonts, the stylesheet
+ * and the Mirrored images are not HTML and keep the long lifetimes they set
+ * for themselves: they are content-addressed or deploy-scoped, and their bytes
+ * genuinely never change.
+ */
+app.use('*', async (c, next) => {
+  await next()
+
+  if (c.res.headers.get('content-type')?.startsWith('text/html') ?? false) {
+    c.res.headers.set('cache-control', 'no-store')
+  }
+})
+
 app.get(SIGN_IN_PATH, (c) => c.html(document(<SignInPage failed={false} />)))
 
 /**

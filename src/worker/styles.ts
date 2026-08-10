@@ -116,7 +116,7 @@ body {
   border-bottom: 1px solid var(--rule);
 }
 
-.masthead h1, .masthead__home {
+.masthead h1, .masthead__home, .masthead__refresh {
   margin: 0;
   color: inherit;
   font-size: 1.05rem;
@@ -131,6 +131,14 @@ body {
 .masthead__home::before { content: "\\2190\\00a0"; }
 
 .masthead__home:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* On the index the title reloads the index. It carries no arrow and no
+   underline: it is the heading, and the only thing that changes is that
+   pressing it does something. Focus still has to say so. */
+.masthead__refresh:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }

@@ -52,6 +52,10 @@ export function IndexPage({
           <Masthead
             appearance={appearance}
             returnTo={here}
+            // The title reloads this index rather than the whole of it: a
+            // refresh that quietly dropped the reader's Section would make
+            // them choose it again every time they asked for the latest.
+            refresh={here}
             elsewhere={{ href: ARCHIVE_PATH, label: 'Archive' }}
           />
 

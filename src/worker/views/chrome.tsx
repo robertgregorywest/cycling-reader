@@ -34,11 +34,16 @@ export function Head({ title }: { readonly title: string }) {
  * On an Article the title becomes the way back to the index, because a reader
  * finishing an Article wants the next one and the browser's own back button is
  * a gesture, not a target.
+ *
+ * On the index it becomes a link to the index itself, for the same reason in
+ * reverse: the reader who left the page open on a tab wants the latest, and
+ * the browser's own reload lives in furniture that a phone hides.
  */
 export function Masthead({
   appearance,
   returnTo,
   home,
+  refresh,
   elsewhere,
 }: {
   readonly appearance: Appearance
@@ -53,6 +58,16 @@ export function Masthead({
    * reset to everything would make them choose their Section twice.
    */
   readonly home?: string
+  /**
+   * This page's own path, which makes the title a reload of it — present on
+   * the index and nowhere else, and never alongside `home`, which is the same
+   * words meaning somewhere else.
+   *
+   * A reload and nothing cleverer. It records a Visit like any other opening
+   * of the index, so the New count is measured from this tap rather than the
+   * last one; what is unread stays unread, which is the signal that survives.
+   */
+  readonly refresh?: string
   /**
    * The other collection, named and linked: the Archive from the Stream, the
    * Stream from the Archive.
@@ -72,7 +87,19 @@ export function Masthead({
           Cycling Reader
         </a>
       ) : (
-        <h1>Cycling Reader</h1>
+        <h1>
+          {refresh === undefined ? (
+            'Cycling Reader'
+          ) : (
+            // Drawn exactly as the heading it replaces: a title that looked
+            // like a link would read as going somewhere, which on every other
+            // page is precisely what it means.
+            <a class="masthead__refresh" href={refresh}>
+              Cycling Reader
+              <span class="offscreen"> — reload for the latest</span>
+            </a>
+          )}
+        </h1>
       )}
       <div class="masthead__controls">
         {elsewhere === undefined ? null : (

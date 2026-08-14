@@ -177,6 +177,24 @@ describe('the photography', () => {
 
     expect(await article()).not.toContain('class="hero"')
   })
+
+  it('recognises the hero in the body when the Source sizes by query string', async () => {
+    // Velo asks its CDN for a width in the query rather than in the filename,
+    // and the Feed's width is never the body's.
+    await seed(
+      anArticle({
+        guid: GUID,
+        source: 'velo',
+        url: 'https://velo.outsideonline.com/road/road-gear/a-piece/',
+        heroImageUrl:
+          'https://velo-cdn.outsideonline.com/wp-content/uploads/2026/08/Wahoo_Indoor_SYSTM_Lifestyle.jpg?width=1200',
+        bodyHtml:
+          '<figure><img src="https://velo-cdn.outsideonline.com/wp-content/uploads/2026/08/Wahoo_Indoor_SYSTM_Lifestyle.jpg?auto=webp&amp;width=3840&amp;quality=75&amp;fit=cover" alt=""></figure><p>Then the words.</p>',
+      }),
+    )
+
+    expect(await article(`/article/velo/${GUID}`)).not.toContain('class="hero"')
+  })
 })
 
 describe('a results table', () => {

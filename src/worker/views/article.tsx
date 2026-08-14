@@ -250,10 +250,18 @@ function bodyOpensWith(article: ReaderArticle, heroImageUrl: string): boolean {
   return asset !== null && article.bodyHtml.includes(asset)
 }
 
-/** `…/2topYbW6G5ADgqfFFwzeLW-1280-80.jpg` names the asset
- * `2topYbW6G5ADgqfFFwzeLW`. */
+/**
+ * `…/2topYbW6G5ADgqfFFwzeLW-1280-80.jpg` names the asset
+ * `2topYbW6G5ADgqfFFwzeLW`.
+ *
+ * The query string goes first: Velo asks for a width in the query rather than
+ * in the filename the way Future's CDN does, so the same photograph arrives as
+ * `…/Wahoo_Indoor_SYSTM_Lifestyle.jpg?width=1200` from the Feed and
+ * `…?width=3840&auto=webp` in the body, and a name still carrying its query
+ * matches neither the body's URL nor the other Sources' shape.
+ */
 function assetName(url: string): string | null {
-  const file = url.split('/').pop()
+  const file = url.replace(/[?#].*$/, '').split('/').pop()
   if (file === undefined || file === '') return null
 
   const name = file.replace(/(?:-\d+-\d+)?\.[a-z]+$/i, '')
